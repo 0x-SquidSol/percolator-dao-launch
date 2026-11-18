@@ -137,6 +137,9 @@ of them can change.
 | 26 | Allowance recipients | Both founders' wallets on the allowance list, drawing from **one shared monthly pot** |
 | 27 | Cost disclosure | Public docs show allowance totals only. Breakdown kept in a git-ignored private file |
 | 28 | Deposits during the raise | Locked until close, like MetaDAO. Refunds only after close |
+| 29 | Where code lives | In this public repository, from the start, clearly marked experimental and unaudited |
+| 30 | Raise program upgrades | **None.** The raise/escrow program would be made immutable once its audited version is deployed |
+| 31 | Check window before launch | DAO programs deployed → **7-day public check window** → launch. No withdrawals during it. Depositors are responsible for verifying programs and are told how |
 
 ---
 
@@ -247,6 +250,10 @@ Unused guaranteed space flows back to everyone else automatically.
 - Only one payment can leave before launch: the **DAO audit fee**, paid
   straight to the audit firm. It has a fixed cap stated in the raise terms, and
   that cap is an [open item](#19-open-items) pending quotes.
+- After the audited DAO programs are deployed, there would be a **7-day
+  public check window** before launch, so anyone can compare the deployed
+  programs with the audited builds. Deposits still can't be withdrawn during
+  it. The window has to fit inside the 3-month deadline.
 - If the token isn't launched within 3 months, anyone can trigger
   **refund mode**. Buyers get back their accepted amount minus their pro-rata
   share of the audit fee already paid. This must be stated clearly before the
@@ -254,8 +261,10 @@ Unused guaranteed space flows back to everyone else automatically.
 
 ### 5.6 Launch (settlement)
 
-One permissionless sequence, which anyone could trigger once the audited DAO
-programs are deployed:
+One permissionless sequence, which anyone could trigger once the check
+window has passed. The raise program would refuse to start it unless every
+DAO program's upgrade authority is already the DAO's 7-day upgrade multisig.
+Once settlement starts, refund mode can't start, and vice versa.
 
 1. Create the token and mint 13M (10M buyers + 3M liquidity).
 2. Create the DAO and treasury (section 6), with the allowance tier set from
@@ -275,6 +284,10 @@ programs are deployed:
 
 - A **Squads v4** multisig vault, controlled by the DAO program. We would call
   Squads, not copy it.
+- A public **execute-only** member lets anyone carry out a transaction the DAO
+  has already approved. It can't approve or change anything.
+- Whether the Squads v4 program itself can be upgraded by a third party is
+  being checked. The result would be disclosed.
 - **No third-party admin key** and no team key on the treasury.
 
 ### 6.2 Monthly allowance
@@ -369,9 +382,13 @@ separate liquidity.
 
 ### 7.4 Upgrades
 
-- Program upgrade authority is held by the DAO.
+- Program upgrade authority is held by a separate, **self-governing** upgrade
+  multisig whose only voter is the DAO. Nobody can change its settings
+  directly, so even changing the delay itself takes 7 days.
 - Upgrades go through a normal proposal, then a **7-day delay** before taking
   effect, so anyone who disagrees can exit first.
+- The raise/escrow program is the exception: it would have **no upgrade
+  authority at all** once its audited version is deployed.
 
 ### 7.5 Fallback
 
@@ -633,7 +650,8 @@ ends with a go/no-go**: stopping at any point is a valid outcome.
   auto-audit rule, refund mode.
 - [ ] Public devnet test so the community can try deposits and the checker
   page with fake funds.
-- [ ] Deploy P1 to mainnet with a verifiable build.
+- [ ] Deploy P1 to mainnet with a verifiable build, then remove its upgrade
+  authority (immutable).
 
 *Exit:* rehearsal passes with no blocking issues.
 
@@ -663,7 +681,10 @@ ends with a go/no-go**: stopping at any point is a valid outcome.
 
 - [ ] The audit fee is paid from escrow to the firm (within the cap).
 - [ ] Audit P2–P6. Fix and re-review. Publish the report.
-- [ ] Final mainnet deployment of P2–P6 with verifiable builds.
+- [ ] Final mainnet deployment of P2–P6 with verifiable builds, upgrade
+  authority set to the DAO's upgrade multisig.
+- [ ] Publish build fingerprints. **7-day public check window** before
+  launch.
 - [ ] Weekly public status updates while funds sit in escrow.
 - [ ] **If the 3-month deadline approaches with no launch:** refund mode.
 
@@ -727,8 +748,13 @@ The allowance is a ceiling. Spending less extends runway.
 
 - **No upgrade keys held by the team after launch.** Upgrade authority goes to
   the DAO with a 7-day delay.
-- **Before launch**, deploy and upgrade keys are held in a founder multisig on
-  hardware wallets, and handed off at launch.
+- **The raise/escrow program is immutable** once its audited version is
+  deployed, so nobody can change it while it holds deposits.
+- **DAO programs** would be deployed with their upgrade authority already set
+  to the DAO's 7-day upgrade multisig, checked by the raise program before
+  launch, followed by a 7-day public check window.
+- **Before that**, deploy keys are held in a founder multisig on hardware
+  wallets, under a written key-handling procedure.
 - **Founders' allowance wallets** on hardware wallets. A lost wallet can be
   replaced only by a proposal (the other founder can still draw from the
   shared pot meanwhile).
@@ -768,6 +794,8 @@ The allowance is a ceiling. Spending less extends runway.
 - Nothing is announced outside official channels. No dates until terms are
   final.
 - Never encourage anyone to buy, hold or sell any token.
+- Any raise terms would carry a prominent **"verify before you deposit"**
+  warning: deposits can't be withdrawn, and here is how to check the programs.
 - Private notes (costs, negotiations) stay in git-ignored `*.private.md`
   files.
 
