@@ -1,0 +1,5 @@
+#!/bin/sh
+# Leak guard for everything about to be pushed: ref names, and every commit's
+# identities, message, file names and contents. See scripts/README.md.
+. "$(dirname "$0")/find-python.sh"
+exec "$PY" scripts/guards/guard.py pre-push

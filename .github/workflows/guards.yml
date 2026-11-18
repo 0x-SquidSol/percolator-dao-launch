@@ -19,12 +19,18 @@ jobs:
       - name: Guard self-tests
         run: python3 -m unittest discover -s scripts/guards -p "test_*.py" -v
 
+      - name: Scan branch or tag name
+        env:
+          GUARD_PATTERNS: ${{ secrets.GUARD_PATTERNS }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: python3 scripts/guards/guard.py ref "${HEAD_REF:-$GITHUB_REF_NAME}"
+
       - name: Scan tracked files
         env:
           GUARD_PATTERNS: ${{ secrets.GUARD_PATTERNS }}
         run: python3 scripts/guards/guard.py tree
 
-      - name: Scan commits
+      - name: Scan every pushed commit (identities, messages, files)
         env:
           GUARD_PATTERNS: ${{ secrets.GUARD_PATTERNS }}
           EVENT_NAME: ${{ github.event_name }}

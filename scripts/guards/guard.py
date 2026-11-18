@@ -11,8 +11,11 @@ Output never prints the matched text, so hook output and CI logs stay clean.
 Usage:
   guard.py staged            check staged changes (pre-commit hook)
   guard.py message <file>    check a commit message and branch (commit-msg hook)
+  guard.py pre-push          check refs and commits about to be pushed (pre-push hook)
   guard.py tree              check every tracked file (CI)
-  guard.py commits <range>   check messages and identities of commits (CI)
+  guard.py commits <range>   check every commit in a range: identities,
+                             messages, file names and file contents (CI)
+  guard.py ref <name>        check a branch or tag name (CI)
 """
 import os
 import re
@@ -76,11 +79,19 @@ def check_name(label, name, patterns, problems):
             problems.append(f"{label} matches private pattern #{index}")
 
 
+def shown(path, patterns):
+    """The path as it may be printed: hidden if it matches a private pattern."""
+    if any(pattern.search(path) for pattern in patterns):
+        return "<path hidden>"
+    return path
+
+
 def check_path(path, patterns, problems):
+    label = shown(path, patterns)
     for pattern, why in FORBIDDEN_PATHS:
         if pattern.search(path):
-            problems.append(f"{path}: {why}")
-    check_name(f"{path}: file name", path, patterns, problems)
+            problems.append(f"{label}: {why}")
+    check_name(f"{label}: file name", path, patterns, problems)
 
 
 def check_text(label, data, patterns, problems):
@@ -110,7 +121,7 @@ def mode_staged(patterns):
     names = git("diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z")
     for path in filter(None, names.decode("utf-8").split("\0")):
         check_path(path, patterns, problems)
-        check_text(path, git("show", ":" + path), patterns, problems)
+        check_text(shown(path, patterns), git("show", ":" + path), patterns, problems)
     check_email("author", ident_email("GIT_AUTHOR_IDENT"), problems)
     check_email("committer", ident_email("GIT_COMMITTER_IDENT"), problems)
     return problems
@@ -134,11 +145,13 @@ def mode_tree(patterns):
         check_path(path, patterns, problems)
         if os.path.isfile(path):
             with open(path, "rb") as handle:
-                check_text(path, handle.read(), patterns, problems)
+                check_text(shown(path, patterns), handle.read(), patterns, problems)
     return problems
 
 
 def mode_commits(patterns, revision_range):
+    """Check every commit, not just the final files: a leak added and then
+    removed in the same push would otherwise stay public in history."""
     problems = []
     log = git("log", "--format=%H%x00%ae%x00%ce%x00%B%x1e", revision_range)
     for record in filter(str.strip, log.decode("utf-8", errors="replace").split("\x1e")):
@@ -147,6 +160,37 @@ def mode_commits(patterns, revision_range):
         check_email(f"commit {short} author", author, problems)
         check_email(f"commit {short} committer", committer, problems)
         check_text(f"commit {short} message", body.encode(), patterns, problems)
+        changed = git("diff-tree", "--no-commit-id", "-r", "--root", "-z",
+                      "--name-only", "--diff-filter=ACMR", sha)
+        for path in filter(None, changed.decode("utf-8").split("\0")):
+            check_path(path, patterns, problems)
+            label = f"commit {short} {shown(path, patterns)}"
+            check_text(label, git("show", f"{sha}:{path}"), patterns, problems)
+    return problems
+
+
+ZERO_SHA = re.compile(r"^0+$")
+
+
+def ref_short_name(ref):
+    return re.sub(r"^refs/(heads|tags)/", "", ref)
+
+
+def mode_pre_push(patterns):
+    """Runs before anything leaves this computer. Git passes one line per ref:
+    <local ref> <local sha> <remote ref> <remote sha>."""
+    problems = []
+    for line in sys.stdin.read().splitlines():
+        parts = line.split()
+        if len(parts) != 4 or ZERO_SHA.match(parts[1]):
+            continue  # malformed line, or deleting a remote ref
+        _, local_sha, remote_ref, remote_sha = parts
+        check_name("pushed ref name", ref_short_name(remote_ref), patterns, problems)
+        if ZERO_SHA.match(remote_sha):
+            revision_range = local_sha  # new remote ref: check all of its history
+        else:
+            revision_range = f"{remote_sha}..{local_sha}"
+        problems += mode_commits(patterns, revision_range)
     return problems
 
 
@@ -163,6 +207,11 @@ def main(argv):
         problems = mode_tree(load_patterns())
     elif mode == "commits" and len(argv) == 3:
         problems = mode_commits(load_patterns(), argv[2])
+    elif mode == "pre-push" and len(argv) == 2:
+        problems = mode_pre_push(load_patterns())
+    elif mode == "ref" and len(argv) == 3:
+        problems = []
+        check_name("ref name", ref_short_name(argv[2]), load_patterns(), problems)
     else:
         sys.exit(__doc__)
     if problems:

@@ -16,8 +16,18 @@ private material:
 - commits whose author or committer email isn't a project address or a
   GitHub noreply address.
 
-Messages never print the matched text, so hook output and CI logs stay clean.
-They run as git hooks on every commit and again in CI on every push.
+Messages never print the matched text (file names that match are hidden too),
+so hook output and CI logs stay clean.
+
+They run in three places:
+- **on every commit** (pre-commit and commit-msg hooks);
+- **before every push** (pre-push hook): ref names, plus every commit being
+  pushed, including its file names and contents, so a leak added and then
+  removed before pushing is still caught;
+- **in CI on every push**: the same checks again, plus every tracked file.
+
+CI can only detect a leak after it is public, so the local hooks are the real
+protection. Never bypass them with `--no-verify`.
 
 ### One-time setup per clone
 
