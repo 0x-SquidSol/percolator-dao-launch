@@ -1,0 +1,20 @@
+percolator-dao-launch
+Copyright (c) 2026 The Percolator contributors
+
+EXPERIMENTAL AND UNAUDITED. This repository is an open experiment. Nothing in
+it is a promise that any raise, token, sale, airdrop or distribution will
+happen. Do not deploy, fund or rely on any code in it.
+
+License
+-------
+No license has been chosen yet for the original work in this repository.
+Until a LICENSE file is added, default copyright applies to that work.
+
+Third-party code keeps its own license. Any file derived from third-party
+code is listed in PROVENANCE.md with its source, exact version and license,
+and keeps the notices that license requires.
+
+Trademarks
+----------
+MetaDAO, Futardio, Backable, Squads, Solana and Anchor are names of their
+respective owners. This project is not affiliated with or endorsed by them.
