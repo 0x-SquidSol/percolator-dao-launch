@@ -1,0 +1,20 @@
+# Experimental and unaudited. See README.md.
+
+[toolchain]
+# Anchor 0.29.0, matching MetaDAO's production setup. Run it through
+# scripts/anchor.sh, which calls that exact version without switching the
+# machine's default (this field alone is not honored by newer Anchor CLIs).
+anchor_version = "0.29.0"
+# Solana 1.17.34 is pinned in the reproducible CI build, not here, so local
+# tooling for other projects is left untouched.
+
+[features]
+seeds = false
+skip-lint = false
+
+[provider]
+cluster = "localnet"
+# Throwaway local test key in a git-ignored folder. Never a real wallet.
+wallet = ".anchor/local-test-wallet.json"
+
+[scripts]

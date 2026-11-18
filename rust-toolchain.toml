@@ -1,0 +1,6 @@
+# Rust for this repository only: matches MetaDAO's production setup for
+# Anchor 0.29 (newer Rust breaks Anchor 0.29's IDL generation).
+[toolchain]
+channel = "1.78.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
