@@ -140,6 +140,11 @@ of them can change.
 | 29 | Where code lives | In this public repository, from the start, clearly marked experimental and unaudited |
 | 30 | Raise program upgrades | **None.** The raise/escrow program would be made immutable once its audited version is deployed |
 | 31 | Check window before launch | DAO programs deployed → **7-day public check window** → launch. No withdrawals during it. Depositors are responsible for verifying programs and are told how |
+| 32 | Team proposal shortcut | Exactly as MetaDAO: team-sponsored proposals need no stake and pass unless fail beats pass by more than 3%, on any proposal type |
+| 33 | Who starts milestone checks | As MetaDAO: the team starts its own 3-month checks, only after the 12-month lock; anyone can start checks for the legacy tranche. Checks always measure the next 3 months |
+| 34 | Minimum deposit | $10 per deposit |
+| 35 | Extra review of the raise program | Audit plus a public bug bounty of up to $10–25K, run for 2–4 weeks on devnet **before** the raise program is deployed to mainnet (where it can't be changed) |
+| 36 | Team wallets in the legacy list | Excluded and kept private. Published: how many, their total holdings, and a fingerprint, privately confirmed by an independent checker. The public script reproduces every other wallet's result exactly |
 
 ---
 
@@ -223,8 +228,8 @@ Milestones are multiples of the final raise price:
 
 ### 5.3 During the 7 days
 
-- Anyone can deposit USDC. Snapshot wallets deposit with a proof of their
-  guaranteed amount.
+- Anyone can deposit USDC, **minimum $10 per deposit**. Snapshot wallets
+  deposit with a proof of their guaranteed amount.
 - Deposits **cannot be withdrawn while the raise is open**, the same as
   MetaDAO. This stops last-minute pull-outs from moving the total or the
   price. Refunds happen only after close (section 5.4).
@@ -409,6 +414,10 @@ need a revised plan.
 - The average comes from the DAO pool's price oracle, which limits how fast
   each observation can move to resist manipulation.
 - Several milestones can be released together if the average clears them.
+- **Who starts a check** (as MetaDAO): the team starts checks for its own
+  package, only after its 12-month lock; anyone can start checks for the
+  legacy tranche. A check always measures the *next* 3 months, so nobody can
+  pick a good period that has already happened.
 - Tokens are **created at release**, not before.
 
 ### 8.2 Team package (40%)
@@ -456,7 +465,10 @@ need a revised plan.
 
 ### 9.3 Exclusions
 
-- Team-linked wallets.
+- Team-linked wallets. These would stay private; what's published is how
+  many were excluded, their total holdings, and a fingerprint of the list,
+  privately confirmed by an independent checker. The public script still
+  reproduces every other wallet's result exactly.
 - Pools, program accounts and bonding-curve accounts.
 - Bots, snipers and bundlers (rules to be published, e.g. bought and sold
   within minutes, or clusters funded from one source).
@@ -641,7 +653,11 @@ ends with a go/no-go**: stopping at any point is a valid outcome.
 - [ ] Optional upgrade: if a subsidy or deferred payment allows it, audit
   P2–P6 before the raise too, so launch can follow within days.
 
-*Exit:* clean P1 audit report published.
+- [ ] Run a public **bug bounty** on the audited raise program for 2–4 weeks
+  on devnet, **before** any mainnet deployment. Fix and re-review any valid
+  report.
+
+*Exit:* clean P1 audit report published; bounty period complete.
 
 ### Phase 5: Rehearsal
 
@@ -720,6 +736,7 @@ ends with a go/no-go**: stopping at any point is a valid outcome.
 | Item | Estimate |
 |---|---|
 | P1 pre-raise audit | ~$10–15K (range $8–25K); subsidies may reduce it |
+| P1 bug bounty | Up to $10–25K, **paid only if a valid serious bug is found** |
 | Legal (initial counsel) | To be quoted |
 | Data (archive RPC/indexer for the snapshot pipeline) | Low hundreds to low thousands |
 | Devnet/mainnet deployment rent and fees | Low thousands |
@@ -835,6 +852,13 @@ The allowance is a ceiling. Spending less extends runway.
 - **Data accuracy:** errors in the legacy list. Mitigated by a public script
   and the dispute window, but 1 week is short.
 - **License:** relies on the LGPL analysis. Counsel to confirm.
+- **Immutable raise program:** once deployed it can't be patched, which is
+  why it gets an audit, a bug bounty and rehearsals first. The refund paths
+  are the safety valve.
+- **USDC issuer controls:** USDC's issuer can freeze USDC accounts, including
+  an escrow vault. This is outside the project's control.
+- **Team proposal shortcut:** as on MetaDAO, team proposals pass unless the
+  market clearly objects, including on proposals that benefit the team.
 
 ---
 
