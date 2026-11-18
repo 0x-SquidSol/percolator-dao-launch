@@ -78,18 +78,30 @@ based voting.
 
 The full list is in [docs/plan.md §19](docs/plan.md#19-open-items).
 
+## Code in this repository
+
+> [!CAUTION]
+> **Experimental, unaudited code. Do not use it.**
+>
+> Code for this experiment is developed in the open, in this repository.
+> - Code here is **work in progress and unaudited**. It may contain serious
+>   bugs and may change or be deleted at any time.
+> - **Code existing here does not mean anything will launch.** Writing,
+>   testing or even auditing it is part of the experiment, not a commitment.
+> - **Do not deploy it, connect funds to it, or rely on it** for anything.
+> - Anything deployed by anyone other than Percolator's official channels is
+>   **not ours**.
+
 ## Repository layout
 
 ```
-docs/
-  plan.md       Start-to-finish working plan for this route
-  research.md   Research record: background, MetaDAO code map, options,
-                license analysis, candidate architecture, audit costs, sources
-README.md       This file: current direction and status
+docs/          Working plan and research record
+README.md      This file: current direction and status
 ```
 
-More will be added as the plan develops. Code, if any is ever written, will be
-experimental until audited.
+As the experiment progresses, folders may be added for specifications,
+on-chain programs, tests, a client library, scripts, data tooling and a web
+app. Each will carry its own experimental notice.
 
 ## Disclaimers
 
