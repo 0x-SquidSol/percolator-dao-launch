@@ -49,6 +49,27 @@ class HistoryGuardTest(unittest.TestCase):
         self.git("commit", "-q", "-m", "chore: remove file")
         self.assertBlocked(self.guard("commits", "HEAD"))
 
+    def test_commits_scan_covers_merge_resolutions(self):
+        self.commit("docs/x.md", "base\n", "docs: base")
+        self.git("checkout", "-q", "-b", "side")
+        self.commit("docs/x.md", "side version\n", "docs: side")
+        self.git("checkout", "-q", "main")
+        self.commit("docs/x.md", "main version\n", "docs: main")
+        self.git("merge", "-q", "side", check=False)  # conflicts on purpose
+        self.stage("docs/x.md", "canary-zz-0000\n")
+        self.git("commit", "-q", "--no-edit")
+        self.commit("docs/x.md", "clean\n", "docs: tidy")
+        self.assertAllowed(self.guard("tree"))
+        self.assertBlocked(self.guard("commits", "HEAD"))
+
+    def test_git_failure_does_not_print_file_names(self):
+        # A submodule-style entry whose object doesn't exist makes `git show` fail.
+        self.git("update-index", "--add", "--cacheinfo",
+                 "160000,1234567890123456789012345678901234567890,ZZTEST-01")
+        result = self.guard("staged")
+        self.assertBlocked(result)
+        self.assertNotIn("ZZTEST", result.stderr)
+
     # --- branch and tag names ---
 
     def test_ref_name_allowed(self):

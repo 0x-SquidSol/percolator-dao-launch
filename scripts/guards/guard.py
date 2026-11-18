@@ -44,7 +44,8 @@ SECRET_KEY_ARRAY = re.compile(r"\[\s*(?:\d{1,3}\s*,\s*){63}\d{1,3}\s*\]")
 def git(*args, check=True):
     result = subprocess.run(["git", *args], capture_output=True)
     if check and result.returncode != 0:
-        sys.exit("guard: git command failed: git " + " ".join(args))
+        # Name only the git subcommand: its arguments may contain file names.
+        sys.exit(f"guard: refusing, 'git {args[0]}' failed (fetch or check the repository)")
     return result.stdout
 
 
@@ -160,9 +161,11 @@ def mode_commits(patterns, revision_range):
         check_email(f"commit {short} author", author, problems)
         check_email(f"commit {short} committer", committer, problems)
         check_text(f"commit {short} message", body.encode(), patterns, problems)
-        changed = git("diff-tree", "--no-commit-id", "-r", "--root", "-z",
+        # -m: for merge commits, list files that differ from each parent, so
+        # content introduced while resolving a merge is checked too.
+        changed = git("diff-tree", "--no-commit-id", "-r", "-m", "--root", "-z",
                       "--name-only", "--diff-filter=ACMR", sha)
-        for path in filter(None, changed.decode("utf-8").split("\0")):
+        for path in sorted(set(filter(None, changed.decode("utf-8").split("\0")))):
             check_path(path, patterns, problems)
             label = f"commit {short} {shown(path, patterns)}"
             check_text(label, git("show", f"{sha}:{path}"), patterns, problems)
