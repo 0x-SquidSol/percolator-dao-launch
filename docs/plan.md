@@ -124,7 +124,7 @@ of them can change.
 | 13 | Launch deadline | **3 months** after the raise closes, else refunds |
 | 14 | Upgrades | Only through DAO governance, with a **7-day** delay |
 | 15 | Governance settings | Same values as MetaDAO's current settings (3-day proposals, 1-day warm-up, +3% pass threshold, −3% for team proposals, 1.5M-token proposal stake). The logic would be written independently |
-| 16 | Auto-audit rule | Up to **$300K**, only if **4 months** of allowance remains afterwards, paid **directly to a firm on a published list**, in **up to 2 payments**, no vote needed |
+| 16 | Auto-audit rule | Up to **$300K**, only if **4 months** of allowance (plus any unspent savings) remains afterwards, paid **directly to a firm on a published list**, in **up to 2 payments**, no vote needed |
 | 17 | Snapshots | Use the existing **pre-crash** snapshot. A second **pre-announcement** snapshot to be taken |
 | 18 | Combining snapshots | Credit **each drop separately** (crash drop, announcement drop) |
 | 19 | Loyalty boost | 0.25× (<1 wk), 1× (1 wk–1 mo), 1.5× (1–3 mo), 2× (3–6 mo), 2.5× (6–12 mo), 3× (12+ mo). Dip buyers get a flat 1× for the announcement drop |
@@ -332,8 +332,8 @@ trip month ($6K from savings, leaving $9K).
 Written into the launch terms, so **no holder vote is needed**:
 
 - Pays up to **$300K** in total.
-- Only if the treasury still holds **≥ 4 months of allowance** after the
-  payment.
+- Only if the treasury still holds **≥ 4 months of allowance, plus any unspent
+  savings-bank balance**, after the payment.
 - Only **directly to an audit firm on a published list**, fixed at launch
   (e.g. OtterSec, Neodyme, Zellic, Accretion, Ackee, Sec3, or similar). A firm
   not on the list would need a proposal.
