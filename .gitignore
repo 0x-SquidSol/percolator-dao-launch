@@ -1,2 +1,29 @@
 # Private notes (never commit)
-*.private.md
+*.private.*
+private/
+
+# Secrets and keys
+.env
+.env.*
+!.env.example
+*keypair*.json
+id.json
+*.pem
+
+# Build output
+target/
+.anchor/
+test-ledger/
+node_modules/
+dist/
+
+# Data pipeline: raw data, caches and outputs stay local
+legacy/cache/
+legacy/out/
+legacy/**/*.csv
+
+# Local tooling
+.claude/
+CLAUDE.local.md
+.DS_Store
+__pycache__/

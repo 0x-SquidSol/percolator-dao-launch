@@ -1,0 +1,8 @@
+# Files named *.private.* must never be committed. scripts/guards/setup.sh
+# makes this filter fail on purpose, so even `git add -f` is refused.
+*.private.* filter=blockprivate
+private/** filter=blockprivate
+
+# Shell scripts and hooks must keep Unix line endings on every platform.
+*.sh text eol=lf
+.githooks/* text eol=lf

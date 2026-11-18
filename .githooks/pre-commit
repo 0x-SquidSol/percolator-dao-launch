@@ -1,0 +1,4 @@
+#!/bin/sh
+# Leak guard for staged changes. See scripts/README.md.
+. "$(dirname "$0")/find-python.sh"
+exec "$PY" scripts/guards/guard.py staged
