@@ -14,6 +14,11 @@ at, what we found, which options we considered, and which direction we are
 currently exploring. It is a research record, not a plan of record.
 
 - **Status:** early exploration (November 2026).
+- **Update:** later working assumptions are in [plan.md](plan.md) and replace
+  parts of this record. In particular, **original-token staking (§7.4) was
+  dropped**, and creator-fee airdrops (§7.5) would go to **current** old-token
+  holders, only if they vote for it. Legacy-holder ideas would use
+  pre-crash/pre-announcement snapshots and a published scoring formula.
 - **Not legal, tax, or financial advice.** The license analysis below rests on
   the license texts and public repository history. Securities and tax questions
   still need counsel.

@@ -32,16 +32,19 @@ but **without depending on any third party's code, admin keys, or permission**:
 - **Liquidity seeded from the raise**, with trading fees going to the DAO
   treasury.
 
-We are also exploring ideas for people who held the earlier pump.fun token
-before it was disowned. These are ideas only and are **not commitments to
-anyone**:
-- a guaranteed slot in the raise;
-- a milestone-released tranche;
-- staking of the original token;
-- redirecting creator fees into airdrops of the new token.
+We are also exploring ideas around the earlier pump.fun token. These are ideas
+only and are **not commitments to anyone**:
+- for wallets in pre-crash / pre-announcement snapshots: a guaranteed slot in
+  the raise and a milestone-released tranche, sized by a published formula;
+- for *current* holders of the old token, and only if they vote for it:
+  redirecting creator fees into weekly airdrops of the new token.
 
-The full background, options, license analysis and costs are in
-**[docs/research.md](docs/research.md)**.
+(Staking the original token was considered and dropped.)
+
+- **[docs/plan.md](docs/plan.md)**: the start-to-finish working plan for this
+  route, with every working assumption.
+- **[docs/research.md](docs/research.md)**: background, options, license
+  analysis and costs.
 
 ## Current direction (working assumptions, not decisions)
 
@@ -49,14 +52,17 @@ The full background, options, license analysis and costs are in
 |---|---|---|
 | Overall route | Our own stack. No MetaDAO deployed programs, current code, or permission | Exploring |
 | Futarchy core | Fork MetaDAO's **LGPL-3.0** release `v0.1` (Dec 2023) and modernize it; never use their later BSL code | Exploring |
-| Other programs | Raise/escrow, AMM, milestone packages and staking written independently | Exploring |
+| Other programs | Raise/escrow, AMM, milestone packages and allowance rules written independently | Exploring |
 | Treasury | Squads v4, which we would call but not copy, controlled by the DAO | Exploring |
-| Admin control | No third-party admin keys. Programs made immutable or DAO-upgradeable after audit | Design goal |
-| Audits | Escrow program audited before any raise. Everything else audited after a raise, alongside the perps audit. No mint until that audit passes | Exploring |
-| Refund safety | Refunds if the minimum isn't met or a launch deadline is missed | Design goal |
-| Liquidity | Seeded from the raise. Our AMM splits that pool into pass/fail pools during proposals | Exploring |
+| Admin control | No third-party admin keys. Upgrades only through DAO governance with a 7-day delay | Design goal |
+| Raise | $250K min / $750K max, 7 days, one price for all (raise ÷ 10M buyer tokens) | Working assumption |
+| Supply | Buyers 40%, team 40% (milestones, 12-month lock), legacy tranche 8% (milestones), liquidity 12% | Working assumption |
+| Audits | Escrow audited before any raise. DAO programs audited after a raise, before any token exists. Perps audit paid later by an automatic treasury rule | Exploring |
+| Refund safety | Refunds if the minimum isn't met or launch misses a 3-month deadline | Design goal |
+| Liquidity | 20% of the raise seeded into a DAO-owned pool. Our AMM splits it into pass/fail pools during proposals | Exploring |
 | Fees | Go to the DAO treasury, not to founders personally | Design goal |
-| Legacy-holder ideas | Guaranteed allocation, milestone tranche, original-token staking, creator-fee airdrops | **Ideas only** |
+| Team spending | Fixed monthly allowance with a "savings bank". Anything more needs governance | Working assumption |
+| Legacy-holder ideas | Guaranteed raise slots and a milestone tranche (snapshot-based). Creator-fee airdrops only if current holders vote for them | **Ideas only** |
 | Open source | All program code public (an LGPL requirement, and needed for trust) | Design goal |
 
 Fallback if futarchy proves impractical: SPL Governance (Realms) with staking-
@@ -65,18 +71,18 @@ based voting.
 ## Open questions
 
 - Whether to go ahead with any of this at all.
-- Raise minimum and maximum, the share of the raise seeded into liquidity, and
-  the launch deadline.
-- Whether and how to recognize legacy holders: snapshot rules, guarantee caps,
-  tranche size, staking design.
-- Audit firm, scope and timing. Subsidy options.
-- Securities and tax counsel.
+- Exact legacy-list minimums and exclusion rules (after reviewing the data).
+- Audit firms, quotes and subsidy options.
+- Securities and tax counsel. Legal wrapper.
 - The license for this repository's own code.
+
+The full list is in [docs/plan.md §19](docs/plan.md#19-open-items).
 
 ## Repository layout
 
 ```
 docs/
+  plan.md       Start-to-finish working plan for this route
   research.md   Research record: background, MetaDAO code map, options,
                 license analysis, candidate architecture, audit costs, sources
 README.md       This file: current direction and status
