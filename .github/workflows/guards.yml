@@ -33,7 +33,7 @@ jobs:
       - name: Provenance guard (no BSL-licensed MetaDAO material)
         run: python3 scripts/guards/provenance.py tree
 
-      - name: Scan every pushed commit (identities, messages, files)
+      - name: Scan every pushed commit (identities, messages, files, provenance)
         env:
           GUARD_PATTERNS: ${{ secrets.GUARD_PATTERNS }}
           EVENT_NAME: ${{ github.event_name }}
@@ -41,6 +41,8 @@ jobs:
         run: |
           if [ "$EVENT_NAME" = "push" ] && [ -n "$BEFORE" ] && ! echo "$BEFORE" | grep -qE '^0+$'; then
             python3 scripts/guards/guard.py commits "$BEFORE..$GITHUB_SHA"
+            python3 scripts/guards/provenance.py commits "$BEFORE..$GITHUB_SHA"
           else
             python3 scripts/guards/guard.py commits HEAD
+            python3 scripts/guards/provenance.py commits HEAD
           fi

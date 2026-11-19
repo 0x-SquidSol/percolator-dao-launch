@@ -13,8 +13,12 @@ Markdown is skipped: our docs discuss MetaDAO's license and programs by
 name. This file and its tests are skipped because they hold the markers.
 
 Usage:
-  provenance.py tree     every tracked file
-  provenance.py staged   staged changes (used by the pre-commit hook)
+  provenance.py tree                     every tracked file
+  provenance.py staged                   staged changes (pre-commit hook)
+  provenance.py commits <rev-list args>  files added or changed by each
+                                         commit, as of that commit (pre-push
+                                         hook and CI), so material added and
+                                         later removed is still caught
 """
 import re
 import subprocess
@@ -73,6 +77,23 @@ def staged_files():
     return [p for p in out.decode("utf-8").split("\0") if p]
 
 
+def commit_files(commit):
+    out = git(
+        "diff-tree", "--no-commit-id", "-r", "-m", "--root", "-z",
+        "--name-only", "--diff-filter=ACMR", commit,
+    )
+    return sorted({p for p in out.decode("utf-8").split("\0") if p})
+
+
+def check_commits(rev_list_args, problems):
+    commits = git("rev-list", *rev_list_args).decode("utf-8").split()
+    for commit in commits:
+        for path in commit_files(commit):
+            found = []
+            check(path, git("show", f"{commit}:{path}"), found)
+            problems.extend(f"{commit[:12]} {problem}" for problem in found)
+
+
 def check(path, data, problems):
     if SKIPPED.search(path) or b"\0" in data:
         return
@@ -84,9 +105,13 @@ def check(path, data, problems):
 
 
 def main(argv):
-    mode = argv[1] if len(argv) == 2 else ""
+    mode = argv[1] if len(argv) >= 2 else ""
     problems = []
-    if mode == "tree":
+    if mode == "commits" and len(argv) >= 3:
+        check_commits(argv[2:], problems)
+    elif len(argv) != 2:
+        sys.exit(__doc__)
+    elif mode == "tree":
         for path in tracked_files():
             data = read(path)
             if data is not None:

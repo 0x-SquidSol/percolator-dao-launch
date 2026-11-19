@@ -104,6 +104,57 @@ class ProvenanceTest(unittest.TestCase):
         self.stage("fixtures/x.bin", "\0Business Source License 1.1")
         self.assertEqual(self.run_guard("staged").returncode, 0)
 
+    # --- commit history (pre-push hook and CI) ---
+
+    def commit(self, path, text, message="change"):
+        self.stage(path, text)
+        self.git("commit", "-q", "-m", message)
+
+    def run_commits(self, *rev_list_args):
+        return subprocess.run(
+            [sys.executable, GUARD, "commits", *rev_list_args],
+            cwd=self.dir, capture_output=True, text=True, env=self.env,
+        )
+
+    def test_clean_history_allowed(self):
+        self.commit("src/a.rs", "pub fn a() {}\n")
+        self.commit("src/b.rs", "pub fn b() {}\n")
+        self.assertEqual(self.run_commits("HEAD").returncode, 0)
+
+    def test_added_then_removed_blocked(self):
+        self.commit("src/a.rs", "pub fn a() {}\n")
+        self.commit("LICENSE", "Business Source License 1.1\n")
+        self.git("rm", "-q", "LICENSE")
+        self.git("commit", "-q", "-m", "remove")
+        self.assertEqual(self.run_guard("tree").returncode, 0)  # final tree is clean
+        result = self.run_commits("HEAD")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("LICENSE", result.stderr)
+
+    def test_merge_bringing_material_blocked(self):
+        self.commit("src/a.rs", "pub fn a() {}\n")
+        self.git("checkout", "-q", "-b", "side")
+        self.commit(
+            "src/b.rs", 'declare_id!("FUTARELBfJfQ8RDGhg1wdhddq1odMAJUePHFuBYfUxKq");\n'
+        )
+        self.git("checkout", "-q", "-")
+        self.commit("src/c.rs", "pub fn c() {}\n")
+        self.git("merge", "-q", "--no-ff", "--no-edit", "side")
+        result = self.run_commits("HEAD~1..HEAD")  # only the merge and what it brings
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("src/b.rs", result.stderr)
+
+    def test_range_excludes_older_commits(self):
+        self.commit("LICENSE", "Business Source License 1.1\n")
+        base = self.git("rev-parse", "HEAD").stdout.decode().strip()
+        self.commit("src/a.rs", "pub fn a() {}\n")
+        self.assertEqual(self.run_commits(f"{base}..HEAD").returncode, 0)
+
+    def test_new_branch_form_allowed(self):
+        # The pre-push hook passes "<sha> --not --remotes" for new branches.
+        self.commit("src/a.rs", "pub fn a() {}\n")
+        self.assertEqual(self.run_commits("HEAD", "--not", "--remotes").returncode, 0)
+
     def test_unknown_mode_fails(self):
         self.assertNotEqual(self.run_guard("everything").returncode, 0)
 

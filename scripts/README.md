@@ -59,8 +59,11 @@ addresses that exist only in MetaDAO's BSL-era programs (their program IDs
 and hard-coded admin keys), or MetaDAO's npm packages. Markdown is skipped,
 because our docs discuss MetaDAO's license and programs by name.
 
-It runs **on every commit** (pre-commit hook) and **in CI on every push**,
-over every tracked file. Its self-tests run with the leak guard's.
+It runs **on every commit** (pre-commit hook), **before every push** over
+each commit being pushed (including merges and rebases, which skip the
+pre-commit hook), and **in CI on every push**, over every tracked file and
+every pushed commit, so material added and later removed is still caught.
+Its self-tests run with the leak guard's.
 
 It is a tripwire for obvious copies, not proof of clean authorship: the
 provenance rules and review still apply.
