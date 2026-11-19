@@ -39,4 +39,4 @@ it.
 
 | Program | Used for | Source | License | How it is obtained |
 |---|---|---|---|---|
-| *(none yet)* | | | | |
+| Squads v4 multisig (`SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf`) | Treasury and upgrade multisigs on mainnet; loaded into the tests | [Squads-Protocol/v4](https://github.com/Squads-Protocol/v4) | AGPL-3.0 | Downloaded from mainnet by `scripts/fetch-fixtures.ts`, checked against a pinned SHA-256, never committed. The `@sqds/multisig` npm package (MIT) builds its instructions. |

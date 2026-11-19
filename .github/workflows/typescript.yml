@@ -35,6 +35,11 @@ jobs:
       - name: Type-check
         run: yarn typecheck
 
+      # Outside programs (Squads v4) come from mainnet, checked against pinned
+      # SHA-256 values in scripts/fetch-fixtures.ts. Never committed.
+      - name: Fetch test fixtures (fingerprint checked)
+        run: yarn fixtures
+
       - name: Tests
         run: yarn test
 

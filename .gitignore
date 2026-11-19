@@ -29,3 +29,7 @@ legacy/**/*.csv
 CLAUDE.local.md
 .DS_Store
 __pycache__/
+
+# Downloaded test fixtures (fetched by checked fingerprint, never committed)
+tests/fixtures/
+*.so

@@ -6,17 +6,21 @@ import {
   Transaction,
   TransactionInstruction,
 } from "@solana/web3.js";
-import { Clock, ProgramTestContext, start } from "solana-bankrun";
+import { AddedAccount, Clock, ProgramTestContext, start } from "solana-bankrun";
 
 export const ONE_MINUTE = 60n;
 export const ONE_HOUR = 60n * ONE_MINUTE;
 export const ONE_DAY = 24n * ONE_HOUR;
 
-/** A fresh bank. Programs under test are added here as they are written. */
+/**
+ * A fresh bank with the given programs (loaded from target/deploy or
+ * tests/fixtures by name) and preset accounts.
+ */
 export async function startBank(
   programs: { name: string; programId: PublicKey }[] = [],
+  accounts: AddedAccount[] = [],
 ): Promise<ProgramTestContext> {
-  return start(programs, []);
+  return start(programs, accounts);
 }
 
 /** Sends one transaction paid by the bank's payer and waits for it. */

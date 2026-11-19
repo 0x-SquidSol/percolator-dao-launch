@@ -14,6 +14,11 @@ mocha. They run on Linux (WSL on Windows), the same as CI.
   enabled so the pinned yarn version is used.
 - `yarn install --frozen-lockfile`. Packages may not run install scripts
   (see `.yarnrc`).
+- `yarn fixtures` downloads the outside programs the tests use (Squads v4)
+  from mainnet into `tests/fixtures/` (git-ignored) and refuses any file whose
+  SHA-256 differs from the value pinned in `scripts/fetch-fixtures.ts`. A
+  mismatch means the program changed on mainnet: review it before updating
+  the pin. Set `SOLANA_RPC_URL` to use another RPC.
 - `yarn test-wallet` creates the throwaway local test key at
   `.anchor/local-test-wallet.json` (git-ignored). Never use it for anything
   real.
@@ -32,6 +37,8 @@ the JavaScript dependency audit described in `scripts/README.md`.
 
 - `bankrun.ts`: start a bank, send transactions, move time
   (`advanceTime`) and slots (`advanceSlots`).
+- `squads.ts`: the Squads v4 program and its ProgramConfig account, for
+  `startBank`.
 - `tokens.ts`: mints, associated token accounts, balances, and a USDC
   stand-in at the real USDC address (`createUsdcMock`). Amounts use 6
   decimals: `tokens(1_000)` is 1,000 tokens.
