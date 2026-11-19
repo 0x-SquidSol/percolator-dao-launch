@@ -25,6 +25,9 @@ yarn test        # all tests
 yarn typecheck   # type-check tests and scripts
 ```
 
+CI runs both on every push (`.github/workflows/typescript.yml`), along with
+the JavaScript dependency audit described in `scripts/README.md`.
+
 ## Helpers (`helpers/`)
 
 - `bankrun.ts`: start a bank, send transactions, move time

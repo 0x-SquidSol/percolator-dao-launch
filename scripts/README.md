@@ -88,3 +88,21 @@ on your `PATH`. Commits and pushes are refused until it is installed.
 Transaction signatures look the same as Solana secret keys. If a real
 signature must be quoted in a doc or test, add a `gitleaks:allow` comment on
 that line, and only after checking it is not a key.
+
+## JavaScript dependency audit (`guards/js_audit.py`)
+
+CI runs `yarn audit` and fails on any known advisory that is not in
+`yarn-audit-allowlist.json`, the reviewed list of advisories we cannot fix
+yet. Every entry names the advisory, the package, its severity and why it is
+accepted. The audit also fails if `yarn audit` did not finish, so a network
+error never counts as a pass. Entries that no longer appear are reported so
+the list can be trimmed.
+
+To check locally (Linux/WSL):
+
+```sh
+yarn audit --json | python3 scripts/guards/js_audit.py yarn-audit-allowlist.json
+```
+
+Before adding an entry, try to fix it first: a newer version of the package
+that pulls it in, or a `resolutions` entry in `package.json`.

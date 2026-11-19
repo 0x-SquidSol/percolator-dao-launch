@@ -1,0 +1,80 @@
+[
+  {
+    "id": "GHSA-3gc7-fjrx-p6mg",
+    "package": "bigint-buffer",
+    "severity": "high",
+    "reason": "Pulled in by @solana/spl-token and @solana/web3.js. No fixed version exists. Test tooling only: parses data from our own local test bank, never untrusted input."
+  },
+  {
+    "id": "GHSA-3g3m-2fjr-6pw4",
+    "package": "glob",
+    "severity": "moderate",
+    "reason": "Pulled in by mocha 12, the newest mocha, which pins this range. Test runner only: globs are our own test file patterns."
+  },
+  {
+    "id": "GHSA-g3hv-75wg-m249",
+    "package": "minimatch",
+    "severity": "moderate",
+    "reason": "Pulled in by mocha 12, the newest mocha, which pins this range. Test runner only: patterns are our own test file patterns."
+  },
+  {
+    "id": "GHSA-528h-pc64-c93x",
+    "package": "stream-json",
+    "severity": "moderate",
+    "reason": "Pulled in by @coral-xyz/anchor 0.29 and the Solana libraries; no fixed version is reachable without leaving Anchor 0.29. Test tooling only: parses responses from our own local test bank."
+  },
+  {
+    "id": "GHSA-hqr4-qq8f-hg3x",
+    "package": "stream-json",
+    "severity": "moderate",
+    "reason": "Pulled in by @coral-xyz/anchor 0.29 and the Solana libraries; no fixed version is reachable without leaving Anchor 0.29. Test tooling only: parses responses from our own local test bank."
+  },
+  {
+    "id": "GHSA-mjw6-4jj6-33hc",
+    "package": "stream-json",
+    "severity": "moderate",
+    "reason": "Pulled in by @coral-xyz/anchor 0.29 and the Solana libraries; no fixed version is reachable without leaving Anchor 0.29. Test tooling only: parses responses from our own local test bank."
+  },
+  {
+    "id": "GHSA-4qx8-w7c3-pj3p",
+    "package": "toml",
+    "severity": "high",
+    "reason": "Pulled in by @coral-xyz/anchor 0.29, which pins toml 3.x. Only parses our own Anchor.toml in tests."
+  },
+  {
+    "id": "GHSA-82x6-q7mm-w9cf",
+    "package": "toml",
+    "severity": "high",
+    "reason": "Pulled in by @coral-xyz/anchor 0.29, which pins toml 3.x. Only parses our own Anchor.toml in tests."
+  },
+  {
+    "id": "GHSA-9j65-hcg3-gc64",
+    "package": "toml",
+    "severity": "high",
+    "reason": "Pulled in by @coral-xyz/anchor 0.29, which pins toml 3.x. Only parses our own Anchor.toml in tests."
+  },
+  {
+    "id": "GHSA-9qmh-m7c6-f92p",
+    "package": "toml",
+    "severity": "high",
+    "reason": "Pulled in by @coral-xyz/anchor 0.29, which pins toml 3.x. Only parses our own Anchor.toml in tests."
+  },
+  {
+    "id": "GHSA-h895-cgqg-jf52",
+    "package": "toml",
+    "severity": "high",
+    "reason": "Pulled in by @coral-xyz/anchor 0.29, which pins toml 3.x. Only parses our own Anchor.toml in tests."
+  },
+  {
+    "id": "GHSA-v5mp-jgw5-2x6j",
+    "package": "toml",
+    "severity": "high",
+    "reason": "Pulled in by @coral-xyz/anchor 0.29, which pins toml 3.x. Only parses our own Anchor.toml in tests."
+  },
+  {
+    "id": "GHSA-w5hq-g745-h8pq",
+    "package": "uuid",
+    "severity": "moderate",
+    "reason": "Pulled in by @coral-xyz/anchor 0.29 and the Solana libraries; no fixed version is reachable without leaving Anchor 0.29. Only affects uuid v3/v5/v6 called with a caller-supplied buffer, which our code never does."
+  }
+]

@@ -1,0 +1,62 @@
+name: typescript checks
+
+# Experimental and unaudited. See README.md.
+# Type-checks and runs the TypeScript tests, and audits JavaScript
+# dependencies against the reviewed allowlist (yarn-audit-allowlist.json).
+# Node comes from package.json (engines), yarn from its packageManager field.
+# No package caches: they can be poisoned.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+
+      - name: Use the pinned yarn
+        run: corepack enable && yarn --version
+
+      - name: Install (exact lockfile, no install scripts)
+        run: yarn install --frozen-lockfile --non-interactive
+
+      - name: Type-check
+        run: yarn typecheck
+
+      - name: Tests
+        run: yarn test
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+
+      - name: Use the pinned yarn
+        run: corepack enable && yarn --version
+
+      # yarn audit exits non-zero whenever any advisory exists, so its exit
+      # code is ignored here; the gate decides, and fails if the audit did
+      # not finish.
+      - name: Dependency audit (fails on anything not reviewed)
+        run: |
+          set -o pipefail
+          { yarn audit --json || true; } | python3 scripts/guards/js_audit.py yarn-audit-allowlist.json
