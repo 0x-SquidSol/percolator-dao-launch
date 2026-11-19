@@ -1,0 +1,48 @@
+# Dependency policy checked by cargo-deny in CI.
+# Experimental and unaudited. See README.md.
+#
+# Every exception added here must say why, with a link, in a comment next to
+# it. Licenses are allowed one by one as real dependencies need them.
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+# Known security advisories, unmaintained and yanked crates fail the check.
+yanked = "deny"
+unmaintained = "all"
+ignore = []
+
+[licenses]
+version = 2
+confidence-threshold = 0.93
+# Permissive licenses only. Business Source License, unknown licenses and
+# anything not listed fail the check. AGPL (needed by the Squads v4 crate)
+# is added only after legal advice.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+]
+unused-allowed-license = "allow"
+
+# This repository's own crates are not published and are checked in review.
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+# Only crates.io. No git dependencies and no other registries.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
