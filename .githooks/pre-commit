@@ -1,4 +1,10 @@
 #!/bin/sh
-# Leak guard for staged changes. See scripts/README.md.
+# Leak guard and secret scan for staged changes. See scripts/README.md.
 . "$(dirname "$0")/find-python.sh"
-exec "$PY" scripts/guards/guard.py staged
+"$PY" scripts/guards/guard.py staged || exit 1
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "secret scan: gitleaks is required for commits (see scripts/README.md)" >&2
+  exit 1
+fi
+exec gitleaks git --pre-commit --staged --config .gitleaks.toml --redact --no-banner .

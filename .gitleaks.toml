@@ -1,0 +1,19 @@
+# Secret scan settings for gitleaks. See scripts/README.md.
+# Experimental and unaudited. See README.md.
+
+title = "percolator-dao-launch secret scan"
+
+# Keep gitleaks' built-in rules (API keys, tokens, private keys, ...).
+[extend]
+useDefault = true
+
+# The built-in rules miss Solana secret keys in their base58 text form (the
+# format wallets export): 64 bytes, which is 87 or 88 base58 characters.
+# Transaction signatures have the same shape, so a real signature quoted in a
+# doc or test needs a `gitleaks:allow` comment on that line, after review.
+[[rules]]
+id = "solana-secret-key-base58"
+description = "Solana secret key (64 bytes, base58)"
+regex = '''(?:^|[^1-9A-HJ-NP-Za-km-z])([1-9A-HJ-NP-Za-km-z]{87,88})(?:$|[^1-9A-HJ-NP-Za-km-z])'''
+secretGroup = 1
+entropy = 4.5
