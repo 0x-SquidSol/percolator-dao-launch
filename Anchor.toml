@@ -18,3 +18,5 @@ cluster = "localnet"
 wallet = ".anchor/local-test-wallet.json"
 
 [scripts]
+# TypeScript tests (bankrun + mocha); see tests/README.md.
+test = "yarn test"
