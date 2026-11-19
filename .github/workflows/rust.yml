@@ -26,6 +26,22 @@ jobs:
       - name: Show toolchain (installs the pinned version)
         run: rustup show active-toolchain && cargo --version
 
+      - name: Every crate uses the workspace lints
+        run: |
+          missing=0
+          for manifest in programs/*/Cargo.toml crates/*/Cargo.toml; do
+            [ -f "$manifest" ] || continue
+            if ! awk '{ sub(/\r$/, "") }
+                /^\[lints\][ \t]*$/ { in_lints = 1; next }
+                /^\[/ { in_lints = 0 }
+                in_lints && /^workspace[ \t]*=[ \t]*true[ \t]*$/ { found = 1 }
+                END { exit !found }' "$manifest"; then
+              echo "::error file=$manifest::missing '[lints] workspace = true'"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
       - name: Formatting
         run: cargo fmt --all --check
 

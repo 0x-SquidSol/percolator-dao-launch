@@ -12,6 +12,8 @@ id.json
 
 # Build output
 target/
+mutants.out/
+mutants.out.old/
 .anchor/
 test-ledger/
 node_modules/
