@@ -1,5 +1,30 @@
 #!/bin/sh
-# Leak guard for everything about to be pushed: ref names, and every commit's
-# identities, message, file names and contents. See scripts/README.md.
+# Leak guard and secret scan for everything about to be pushed: ref names,
+# and every commit's identities, message, file names and contents, including
+# commits made by merges and rebases, which skip the pre-commit hook.
+# See scripts/README.md.
 . "$(dirname "$0")/find-python.sh"
-exec "$PY" scripts/guards/guard.py pre-push
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "secret scan: gitleaks is required for pushes (see scripts/README.md)" >&2
+  exit 1
+fi
+
+# git passes one "<local ref> <local sha> <remote ref> <remote sha>" line per
+# ref. Both checks need it, so keep a copy.
+updates=$(cat)
+
+printf '%s\n' "$updates" | "$PY" scripts/guards/guard.py pre-push || exit 1
+
+zero=0000000000000000000000000000000000000000
+printf '%s\n' "$updates" | while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -n "$local_sha" ] || continue
+  [ "$local_sha" = "$zero" ] && continue  # deleting a ref: nothing to scan
+  if [ "$remote_sha" = "$zero" ]; then
+    range="$local_sha --not --remotes"    # new ref: commits not yet on the remote
+  else
+    range="$remote_sha..$local_sha"
+  fi
+  gitleaks git --config .gitleaks.toml --redact --no-banner \
+    --log-opts="$range" . || exit 1
+done

@@ -58,13 +58,15 @@ tokens and private keys. Settings live in `.gitleaks.toml`: gitleaks' built-in
 rules plus a custom rule for Solana secret keys in their base58 text form,
 which the built-in rules miss. Findings are redacted.
 
-It runs **on every commit** (in the pre-commit hook, after the leak guard)
-and **in CI on every push**, over the full history.
+It runs **on every commit** (in the pre-commit hook, after the leak guard),
+**before every push** over each commit being pushed (so commits made by
+merges and rebases, which skip the pre-commit hook, are scanned too), and
+**in CI on every push**, over the full history.
 
 Install gitleaks **v8.30.1** once per machine, from the
 [release page](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1),
 check the download against the release's `checksums.txt`, and put the binary
-on your `PATH`. Commits are refused until it is installed.
+on your `PATH`. Commits and pushes are refused until it is installed.
 
 Transaction signatures look the same as Solana secret keys. If a real
 signature must be quoted in a doc or test, add a `gitleaks:allow` comment on
