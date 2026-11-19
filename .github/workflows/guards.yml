@@ -30,6 +30,9 @@ jobs:
           GUARD_PATTERNS: ${{ secrets.GUARD_PATTERNS }}
         run: python3 scripts/guards/guard.py tree
 
+      - name: Provenance guard (no BSL-licensed MetaDAO material)
+        run: python3 scripts/guards/provenance.py tree
+
       - name: Scan every pushed commit (identities, messages, files)
         env:
           GUARD_PATTERNS: ${{ secrets.GUARD_PATTERNS }}

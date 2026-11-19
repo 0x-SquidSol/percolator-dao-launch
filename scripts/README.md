@@ -51,6 +51,20 @@ Each guard has a test that plants an example leak and checks it is blocked.
 Stage explicit paths (or use `git add -p`), and review `git diff --cached`
 before committing. Avoid `git add -A` and `git add .`.
 
+## Provenance guard (`guards/provenance.py`)
+
+Only MetaDAO's LGPL releases may be used here (see `PROVENANCE.md`). This
+guard refuses code or config containing Business Source License text,
+addresses that exist only in MetaDAO's BSL-era programs (their program IDs
+and hard-coded admin keys), or MetaDAO's npm packages. Markdown is skipped,
+because our docs discuss MetaDAO's license and programs by name.
+
+It runs **on every commit** (pre-commit hook) and **in CI on every push**,
+over every tracked file. Its self-tests run with the leak guard's.
+
+It is a tripwire for obvious copies, not proof of clean authorship: the
+provenance rules and review still apply.
+
 ## Secret scan (gitleaks)
 
 [gitleaks](https://github.com/gitleaks/gitleaks) looks for API keys, access

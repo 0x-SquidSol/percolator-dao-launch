@@ -20,7 +20,8 @@ it.
    `v0.1` (commit `a9eaaf5`, December 2023). MetaDAO code released under the
    Business Source License (from commit `5452889` onward) is **never** copied,
    adapted or paraphrased here. See [docs/research.md](docs/research.md) for
-   the license analysis.
+   the license analysis. A provenance guard (`scripts/guards/provenance.py`)
+   checks every commit for BSL license text and BSL-era MetaDAO addresses.
 5. **Programs we call but do not copy** (for example Squads v4) are listed
    too. Their binaries are fetched by checked fingerprint for tests and never
    committed.
