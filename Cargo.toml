@@ -14,6 +14,11 @@ unsafe_code = "deny"
 # Plain + - * / % and friends can overflow, wrap or panic. Math must use
 # checked_* (or saturating_* where that is the intended behavior) instead.
 arithmetic_side_effects = "deny"
+# `as` casts silently truncate, wrap or drop the sign. Use try_from/try_into
+# (which fail loudly) instead.
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
 
 [profile.release]
 # Integer overflow aborts instead of silently wrapping, in release builds too.
