@@ -1,7 +1,7 @@
 # Experimental and unaudited. See README.md.
 [workspace]
-members = ["programs/*"]
-exclude = ["programs/README.md"]
+members = ["programs/*", "crates/*"]
+exclude = ["programs/README.md", "crates/README.md"]
 resolver = "2"
 
 [profile.release]
