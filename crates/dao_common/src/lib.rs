@@ -4,4 +4,5 @@
 //! here one at a time, each with its own tests.
 #![forbid(unsafe_code)]
 
+pub mod durations;
 pub mod merkle;
