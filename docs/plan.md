@@ -585,6 +585,9 @@ Shared rules for all programs:
   another).
 - Verifiable builds. Public source. Full test suites (unit + integration +
   end-to-end lifecycle).
+- Kani proofs wherever they fit: money math is checked for every possible
+  input (no overflow or crash, funds add up, rounding in the protocol's
+  favour), not just examples.
 - Events for every state change, for indexers and the frontend.
 
 Off-chain pieces: raise frontend, checker page, claim pages, proposal/trading

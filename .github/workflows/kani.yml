@@ -1,0 +1,36 @@
+name: kani proofs
+
+# Experimental and unaudited. See README.md.
+# Kani proves properties for every possible input, not just examples. Kani
+# brings its own Rust toolchain, separate from the Rust 1.78 build. Proofs
+# here must stay fast (seconds): the solver is memory-hungry, and slow proofs
+# belong in local runs, not CI.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  KANI_VERSION: 0.67.0
+
+jobs:
+  proofs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Built from its lockfile with the runner's stable Rust; `kani setup`
+      # then downloads the matching Kani toolchain bundle.
+      - name: Install Kani
+        run: |
+          cargo +stable install --locked kani-verifier@"$KANI_VERSION"
+          cargo +stable kani setup
+
+      - name: Run every proof
+        run: cargo kani -p dao_common

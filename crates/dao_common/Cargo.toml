@@ -12,7 +12,10 @@ path = "src/lib.rs"
 [lints]
 workspace = true
 
-[dependencies]
+# Left out of Kani builds: solana-program 1.17 pins dependencies that Kani's
+# newer compiler rejects, and proofs use a stand-in hash instead. Logic that
+# Kani checks must therefore stay plain Rust.
+[target.'cfg(not(kani))'.dependencies]
 # Latest 1.17 patch; Anchor 0.29 needs 1.17 (MetaDAO's lockfile has 1.17.14).
 solana-program = "=1.17.34"
 

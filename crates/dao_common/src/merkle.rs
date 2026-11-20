@@ -3,8 +3,6 @@
 //! recomputes the leaf from the claim's own fields; never accept a leaf hash
 //! from the caller.
 
-use solana_program::hash::hashv;
-
 /// Prefix byte for leaf hashes.
 pub const LEAF_PREFIX: u8 = 0x00;
 /// Prefix byte for internal node hashes.
@@ -69,7 +67,18 @@ pub fn leaf(
     amount: u64,
     index: u32,
 ) -> [u8; 32] {
-    hashv(&[
+    leaf_hash(domain, distribution, wallet, amount, index)
+}
+
+#[cfg(not(kani))]
+fn leaf_hash(
+    domain: Domain,
+    distribution: &[u8; 32],
+    wallet: &[u8; 32],
+    amount: u64,
+    index: u32,
+) -> [u8; 32] {
+    solana_program::hash::hashv(&[
         &[LEAF_PREFIX],
         &[domain.tag_len()],
         domain.tag(),
@@ -84,7 +93,38 @@ pub fn leaf(
 /// Combines two hashes. Order-independent: the smaller hash goes first.
 pub fn node(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
     let (low, high) = if a <= b { (a, b) } else { (b, a) };
-    hashv(&[&[NODE_PREFIX], low, high]).to_bytes()
+    node_hash(low, high)
+}
+
+#[cfg(not(kani))]
+fn node_hash(low: &[u8; 32], high: &[u8; 32]) -> [u8; 32] {
+    solana_program::hash::hashv(&[&[NODE_PREFIX], low, high]).to_bytes()
+}
+
+// Kani cannot reason about SHA-256, so proofs use these cheap fixed-size
+// stand-ins. They are deterministic and depend on every input field, and the
+// node stand-in depends on argument order, so the proofs about the
+// surrounding logic stay meaningful. Never compiled into real builds.
+
+#[cfg(kani)]
+fn leaf_hash(
+    domain: Domain,
+    distribution: &[u8; 32],
+    wallet: &[u8; 32],
+    amount: u64,
+    index: u32,
+) -> [u8; 32] {
+    let amount = amount.to_le_bytes();
+    let index = index.to_le_bytes();
+    let tag = domain.tag_len();
+    core::array::from_fn(|i| {
+        distribution[i] ^ wallet[i].rotate_left(1) ^ amount[i & 7] ^ index[i & 3] ^ tag
+    })
+}
+
+#[cfg(kani)]
+fn node_hash(low: &[u8; 32], high: &[u8; 32]) -> [u8; 32] {
+    core::array::from_fn(|i| low[i] ^ high[i].rotate_left(1) ^ NODE_PREFIX)
 }
 
 /// Whether `proof` leads from `leaf` to `root`. Rejects proofs longer than
@@ -322,5 +362,86 @@ mod tests {
             &p,
             &root
         ));
+    }
+}
+
+/// Kani proofs: these hold for every possible input, not just examples.
+/// Run with `cargo kani` (Linux). The hash is the stand-in above.
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    /// Verifies a symbolic proof of exactly `N` steps: never panics, and
+    /// both outcomes are reachable. Every step runs the same code, so short
+    /// fixed lengths cover the loop; the length limit has its own proof and
+    /// unit tests run full 24-step proofs. (A symbolic length, or 24 symbolic
+    /// steps, takes Kani far too long.)
+    fn check_verify_proof<const N: usize>() {
+        let siblings: [[u8; 32]; N] = kani::any();
+        let root: [u8; 32] = kani::any();
+        let candidate: [u8; 32] = kani::any();
+        let accepted = verify_proof(&siblings, &root, candidate);
+        kani::cover!(accepted, "some proof is accepted");
+        kani::cover!(!accepted, "some proof is rejected");
+    }
+
+    #[kani::proof]
+    #[kani::unwind(34)]
+    fn verify_proof_never_panics_1_step() {
+        check_verify_proof::<1>();
+    }
+
+    #[kani::proof]
+    #[kani::unwind(34)]
+    fn verify_proof_never_panics_4_steps() {
+        check_verify_proof::<4>();
+    }
+
+    /// A proof longer than the limit is always rejected, whatever it holds.
+    #[kani::proof]
+    #[kani::unwind(34)]
+    fn proofs_over_the_limit_always_rejected() {
+        let siblings: [[u8; 32]; MAX_PROOF_LEN + 1] = kani::any();
+        let root: [u8; 32] = kani::any();
+        let candidate: [u8; 32] = kani::any();
+        assert!(!verify_proof(&siblings, &root, candidate));
+    }
+
+    /// Combining two hashes gives the same result in either order.
+    #[kani::proof]
+    fn node_is_order_independent() {
+        let a: [u8; 32] = kani::any();
+        let b: [u8; 32] = kani::any();
+        assert_eq!(node(&a, &b), node(&b, &a));
+        kani::cover!(a != b, "distinct inputs are covered");
+    }
+
+    /// With no proof, an entry is accepted exactly when it is the root.
+    #[kani::proof]
+    fn empty_proof_accepts_only_the_root() {
+        let root: [u8; 32] = kani::any();
+        let candidate: [u8; 32] = kani::any();
+        assert_eq!(verify_proof(&[], &root, candidate), candidate == root);
+    }
+
+    /// verify_claim never panics for any claim fields, with a 4-step proof.
+    #[kani::proof]
+    #[kani::unwind(34)]
+    fn verify_claim_never_panics() {
+        let domain = match kani::any::<u8>() {
+            0 => Domain::Guaranteed,
+            1 => Domain::LegacyTranche,
+            _ => Domain::WeeklyDrop,
+        };
+        let siblings: [[u8; 32]; 4] = kani::any();
+        let _ = verify_claim(
+            domain,
+            &kani::any(),
+            &kani::any(),
+            kani::any(),
+            kani::any(),
+            &siblings,
+            &kani::any(),
+        );
     }
 }
