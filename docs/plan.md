@@ -145,6 +145,7 @@ of them can change.
 | 34 | Minimum deposit | $10 per deposit |
 | 35 | Extra review of the raise program | Audit plus a public bug bounty of up to $10–25K, run for 2–4 weeks on devnet **before** the raise program is deployed to mainnet (where it can't be changed) |
 | 36 | Team wallets in the legacy list | Excluded and kept private. Published: how many, their total holdings, and a fingerprint, privately confirmed by an independent checker. The public script reproduces every other wallet's result exactly |
+| 37 | Claims program (P6) | **Written independently**, for both the legacy tranche claims and the weekly creator-fee drops. It reuses well-known ideas (such as hashing list entries and tree nodes differently) but copies no code from existing open-source distributors, which are GPL-licensed. It would be its own deployment, upgrade-controlled by the DAO |
 
 ---
 
@@ -559,8 +560,8 @@ Receiving tokens may be taxable in many places. Any final terms would say so.
 6. **Claim page.** Shares accumulate, so a holder can claim many weeks at once
    and pay one fee. Each week's share is claimable for **90 days**, then rolls
    into the next drop. It **never goes to the team**.
-7. **Tooling:** a script + public wallet + an existing open-source merkle
-   distributor (license checked). No new program needed.
+7. **Tooling:** a script + public wallet + the claims program (P6,
+   decision 37).
 
 ---
 
@@ -573,7 +574,7 @@ Receiving tokens may be taxable in many places. Any final terms would say so.
 | P3 | **AMM + oracle**: spot pool, split/merge into pass/fail pools, fee to treasury, manipulation-resistant average price | Written independently (LGPL-era AMM code may be referenced) | Post-raise |
 | P4 | **Milestone packages**: team and legacy packages, 3-month average checks, 12-month team lock, capped minting | Written independently | Post-raise |
 | P5 | **Allowance/savings bank + auto-audit rule** | Written independently | Post-raise |
-| P6 | **Claims**: legacy tranche claims (merkle). May reuse an open-source distributor | Existing open source, license checked | Post-raise |
+| P6 | **Claims**: legacy tranche claims and weekly drops (merkle) | Written independently (decision 37) | Post-raise |
 
 Shared rules for all programs:
 
@@ -796,8 +797,8 @@ The allowance is a ceiling. Spending less extends runway.
   claims.
 - [ ] Terms of use and a risk disclosure for the raise, claims and governance.
 - [ ] License compliance: LGPL fork obligations (keep notices, publish
-  modified source), Squads AGPL implications, distributor license, BSL
-  avoidance with a provenance log.
+  modified source), Squads AGPL implications, BSL avoidance with a
+  provenance log.
 - [ ] Trademark care: no use of MetaDAO/Futardio/Backable branding.
 - [ ] Privacy: no personal data in public repos.
 
