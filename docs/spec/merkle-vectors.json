@@ -1,0 +1,317 @@
+{
+  "spec": "docs/spec/merkle.md",
+  "hash": "sha256",
+  "leaf_prefix": "00",
+  "node_prefix": "01",
+  "max_proof_len": 24,
+  "domains": {
+    "guaranteed": "percolator-dao-launch/guaranteed/v1",
+    "legacy-tranche": "percolator-dao-launch/legacy-tranche/v1",
+    "weekly-drop": "percolator-dao-launch/weekly-drop/v1"
+  },
+  "cases": [
+    {
+      "name": "one entry",
+      "domain": "percolator-dao-launch/guaranteed/v1",
+      "distribution": "GhHerJ5P9XXPq2ZEgkLTgRi6xuVc2H9Wm8FhEHVMPv34",
+      "root": "c857d91e79d75a2765a06b93d4ed5d70343a8063da8fe47e848fad9cb6cca3ce",
+      "entries": [
+        {
+          "wallet": "51fMQFCEPjMMGFiXG1kLESC86gSur9gaLcKVgd8WUdNK",
+          "amount": "500000000",
+          "index": 0,
+          "leaf": "c857d91e79d75a2765a06b93d4ed5d70343a8063da8fe47e848fad9cb6cca3ce",
+          "proof": []
+        }
+      ]
+    },
+    {
+      "name": "two entries",
+      "domain": "percolator-dao-launch/guaranteed/v1",
+      "distribution": "GhHerJ5P9XXPq2ZEgkLTgRi6xuVc2H9Wm8FhEHVMPv34",
+      "root": "272f95cdd616f6f9685f888d53ea62437492fbac4b7708f59b15db723abda2aa",
+      "entries": [
+        {
+          "wallet": "51fMQFCEPjMMGFiXG1kLESC86gSur9gaLcKVgd8WUdNK",
+          "amount": "500000000",
+          "index": 0,
+          "leaf": "c857d91e79d75a2765a06b93d4ed5d70343a8063da8fe47e848fad9cb6cca3ce",
+          "proof": [
+            "1b93c549e97898156185224f82631b5230e0b4d5d6ff566544985110cc53fa62"
+          ]
+        },
+        {
+          "wallet": "HxUU9dzukLdPxXcvUmJkbiGgL9Ks2RYQ4k2qP4EysZL4",
+          "amount": "120000000",
+          "index": 0,
+          "leaf": "1b93c549e97898156185224f82631b5230e0b4d5d6ff566544985110cc53fa62",
+          "proof": [
+            "c857d91e79d75a2765a06b93d4ed5d70343a8063da8fe47e848fad9cb6cca3ce"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "three entries (odd level)",
+      "domain": "percolator-dao-launch/weekly-drop/v1",
+      "distribution": "ARLRFxdodHHSYFDod7cmh6D1f4stxtyPvTUvSWYJRXav",
+      "root": "6cc29e068e5816fbab32e0e1db6639bbd07297c13311ffa5b3ace36f3e313782",
+      "entries": [
+        {
+          "wallet": "51fMQFCEPjMMGFiXG1kLESC86gSur9gaLcKVgd8WUdNK",
+          "amount": "1",
+          "index": 0,
+          "leaf": "f1a27ab7e7013564d0ded5ad19267301ff9597f2df953dd6517bb88adb05f053",
+          "proof": [
+            "a007a278f2d7bf815902cc928a2b3e2398a18a10d5d5c4c2e5d76973170b1ef9"
+          ]
+        },
+        {
+          "wallet": "HxUU9dzukLdPxXcvUmJkbiGgL9Ks2RYQ4k2qP4EysZL4",
+          "amount": "2",
+          "index": 0,
+          "leaf": "6f43ab0cbcae5f158f5ef754be04c5299c8799114987847fb564378bf1665cf8",
+          "proof": [
+            "3e90794df2e9c49e636fe8bd4ba63989344834733b643f221174180102a4ee7f",
+            "f1a27ab7e7013564d0ded5ad19267301ff9597f2df953dd6517bb88adb05f053"
+          ]
+        },
+        {
+          "wallet": "ByTGsddsc9F1Mt8teHbGkcqrnSSt3kEU7jsM1ebjxsDP",
+          "amount": "3",
+          "index": 0,
+          "leaf": "3e90794df2e9c49e636fe8bd4ba63989344834733b643f221174180102a4ee7f",
+          "proof": [
+            "6f43ab0cbcae5f158f5ef754be04c5299c8799114987847fb564378bf1665cf8",
+            "f1a27ab7e7013564d0ded5ad19267301ff9597f2df953dd6517bb88adb05f053"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "six entries",
+      "domain": "percolator-dao-launch/weekly-drop/v1",
+      "distribution": "EhmG4WQhtxQUbcv1fgoHGgH5ZvBmVxAMihWyTPdATaHv",
+      "root": "2bb71d3cfc2b2d4a2274995b97fb76e6b159a4dbc8893720c2c695131db89be9",
+      "entries": [
+        {
+          "wallet": "51fMQFCEPjMMGFiXG1kLESC86gSur9gaLcKVgd8WUdNK",
+          "amount": "1000000000",
+          "index": 0,
+          "leaf": "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+          "proof": [
+            "f1c38be49b7d638f3829859c139f4d3f7dc4fccdec3327d83d5dabf7638f9c63",
+            "0ab8af5c82d9cbc123c584f7e4d3f716ba1503d01b9a9705f3876c7387872de5"
+          ]
+        },
+        {
+          "wallet": "HxUU9dzukLdPxXcvUmJkbiGgL9Ks2RYQ4k2qP4EysZL4",
+          "amount": "2000000000",
+          "index": 0,
+          "leaf": "b378b934516ec02e297a7d963b264149fa0363db35923eba46303d1f8c8bd9af",
+          "proof": [
+            "6300cf56f0f4681c6e5e12de2dd904e7e9b3ac28ac9606481eec962df32b099b",
+            "d3f5c8dc65b582a89d886dae2f1b8bf50901a744155a4fbdbbfdc92eda91ae03",
+            "f028d6508b54b8553c0da9370878193db0e0a5e1e360b77e92c677f15a71117a"
+          ]
+        },
+        {
+          "wallet": "ByTGsddsc9F1Mt8teHbGkcqrnSSt3kEU7jsM1ebjxsDP",
+          "amount": "3000000000",
+          "index": 0,
+          "leaf": "f1c38be49b7d638f3829859c139f4d3f7dc4fccdec3327d83d5dabf7638f9c63",
+          "proof": [
+            "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+            "0ab8af5c82d9cbc123c584f7e4d3f716ba1503d01b9a9705f3876c7387872de5"
+          ]
+        },
+        {
+          "wallet": "aWxBn3ycXCPoiqoTecaxBSyiBQ33NxoFtUykvusesJ3",
+          "amount": "4000000000",
+          "index": 0,
+          "leaf": "b8e2c36e190d5346f6af20beeae6277ec78cf44c2a81f5cd8905e52cdc0a61d3",
+          "proof": [
+            "cdce33a90a48b34bf6ef6e8e8d0c0e2624768b0481892d77f48554b2138410e3",
+            "c26d8f49ffc6310a945ec84a0f56216b4cda351934549722f4467a5ba7eb938f",
+            "f028d6508b54b8553c0da9370878193db0e0a5e1e360b77e92c677f15a71117a"
+          ]
+        },
+        {
+          "wallet": "26255Uk3UauYymr9Qi4ystmGKV4CrFbpUH5JbKu97zWy",
+          "amount": "5000000000",
+          "index": 0,
+          "leaf": "6300cf56f0f4681c6e5e12de2dd904e7e9b3ac28ac9606481eec962df32b099b",
+          "proof": [
+            "b378b934516ec02e297a7d963b264149fa0363db35923eba46303d1f8c8bd9af",
+            "d3f5c8dc65b582a89d886dae2f1b8bf50901a744155a4fbdbbfdc92eda91ae03",
+            "f028d6508b54b8553c0da9370878193db0e0a5e1e360b77e92c677f15a71117a"
+          ]
+        },
+        {
+          "wallet": "AwZBAyDLw9mnzXzD3MqsLs87PuPP1S61FdsNxMvNe8pV",
+          "amount": "6000000000",
+          "index": 0,
+          "leaf": "cdce33a90a48b34bf6ef6e8e8d0c0e2624768b0481892d77f48554b2138410e3",
+          "proof": [
+            "b8e2c36e190d5346f6af20beeae6277ec78cf44c2a81f5cd8905e52cdc0a61d3",
+            "c26d8f49ffc6310a945ec84a0f56216b4cda351934549722f4467a5ba7eb938f",
+            "f028d6508b54b8553c0da9370878193db0e0a5e1e360b77e92c677f15a71117a"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tranche releases for one wallet",
+      "domain": "percolator-dao-launch/legacy-tranche/v1",
+      "distribution": "GhHerJ5P9XXPq2ZEgkLTgRi6xuVc2H9Wm8FhEHVMPv34",
+      "root": "21b586383e7b798d3ceee3171a9b395a304e4d91a534a979d9a0e22f309a9b5d",
+      "entries": [
+        {
+          "wallet": "51fMQFCEPjMMGFiXG1kLESC86gSur9gaLcKVgd8WUdNK",
+          "amount": "100000000",
+          "index": 0,
+          "leaf": "f3722bb32cbdb37f1d5800cf66d49e6b21f7c2667aa9d1dd82d8865380466c3a",
+          "proof": [
+            "e441d7d0defbccceb71021b0eb535e471dc22ec1ebda3807623aa0f602c2f6eb",
+            "b205f2d9504c9cc24354c39b5be1aa08f08f5f9cd21824320cedf39b3e15b8b7"
+          ]
+        },
+        {
+          "wallet": "51fMQFCEPjMMGFiXG1kLESC86gSur9gaLcKVgd8WUdNK",
+          "amount": "100000000",
+          "index": 1,
+          "leaf": "88a3bd97bfbce9c15ac64ac9f7d9cd55eddd9863d3ca4fe00d42bf42fc001f84",
+          "proof": [
+            "675ae3ebc883b0cc0a69a0eae09765e6c330fad69d0b70d7c9872dcb0a70df86",
+            "f681391a84d66c859b9b1d47ad7a4c7a4fdceb3f7813233d23626556802b7e39"
+          ]
+        },
+        {
+          "wallet": "51fMQFCEPjMMGFiXG1kLESC86gSur9gaLcKVgd8WUdNK",
+          "amount": "100000000",
+          "index": 2,
+          "leaf": "e441d7d0defbccceb71021b0eb535e471dc22ec1ebda3807623aa0f602c2f6eb",
+          "proof": [
+            "f3722bb32cbdb37f1d5800cf66d49e6b21f7c2667aa9d1dd82d8865380466c3a",
+            "b205f2d9504c9cc24354c39b5be1aa08f08f5f9cd21824320cedf39b3e15b8b7"
+          ]
+        },
+        {
+          "wallet": "HxUU9dzukLdPxXcvUmJkbiGgL9Ks2RYQ4k2qP4EysZL4",
+          "amount": "50000000",
+          "index": 0,
+          "leaf": "675ae3ebc883b0cc0a69a0eae09765e6c330fad69d0b70d7c9872dcb0a70df86",
+          "proof": [
+            "88a3bd97bfbce9c15ac64ac9f7d9cd55eddd9863d3ca4fe00d42bf42fc001f84",
+            "f681391a84d66c859b9b1d47ad7a4c7a4fdceb3f7813233d23626556802b7e39"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "largest amount and index",
+      "domain": "percolator-dao-launch/legacy-tranche/v1",
+      "distribution": "GhHerJ5P9XXPq2ZEgkLTgRi6xuVc2H9Wm8FhEHVMPv34",
+      "root": "bd09c9f2b040137b59e4ba7c2b16c194db8069fa8b3b92e548c0f7e0132262e1",
+      "entries": [
+        {
+          "wallet": "51fMQFCEPjMMGFiXG1kLESC86gSur9gaLcKVgd8WUdNK",
+          "amount": "18446744073709551615",
+          "index": 4294967295,
+          "leaf": "b321d4fda550d3efbc0d2b11d3e9d70e24969f8a5acf92ef619e36ec1a6c586c",
+          "proof": [
+            "89b646fc0ef7c2ace75aa9ba739718c0782bd256a873de233420667114e17015"
+          ]
+        },
+        {
+          "wallet": "HxUU9dzukLdPxXcvUmJkbiGgL9Ks2RYQ4k2qP4EysZL4",
+          "amount": "1",
+          "index": 0,
+          "leaf": "89b646fc0ef7c2ace75aa9ba739718c0782bd256a873de233420667114e17015",
+          "proof": [
+            "b321d4fda550d3efbc0d2b11d3e9d70e24969f8a5acf92ef619e36ec1a6c586c"
+          ]
+        }
+      ]
+    }
+  ],
+  "must_fail": [
+    {
+      "why": "amount changed",
+      "leaf": "936f1b37c977dc82869f37d19aff4eab4b93f5f927bde9e054a54504ffab5780",
+      "proof": [
+        "f1c38be49b7d638f3829859c139f4d3f7dc4fccdec3327d83d5dabf7638f9c63",
+        "0ab8af5c82d9cbc123c584f7e4d3f716ba1503d01b9a9705f3876c7387872de5"
+      ],
+      "root": "2bb71d3cfc2b2d4a2274995b97fb76e6b159a4dbc8893720c2c695131db89be9"
+    },
+    {
+      "why": "index changed",
+      "leaf": "02d15a5a67ca966b3793ef5a4d4da4841113b7f73976f67cc0485493ffdd12de",
+      "proof": [
+        "f1c38be49b7d638f3829859c139f4d3f7dc4fccdec3327d83d5dabf7638f9c63",
+        "0ab8af5c82d9cbc123c584f7e4d3f716ba1503d01b9a9705f3876c7387872de5"
+      ],
+      "root": "2bb71d3cfc2b2d4a2274995b97fb76e6b159a4dbc8893720c2c695131db89be9"
+    },
+    {
+      "why": "same entry under another domain",
+      "leaf": "52c8985c97b10e02dc7a0ed1c969300e064b76e5109cdd9eee5ce73ed2a9b8e7",
+      "proof": [
+        "f1c38be49b7d638f3829859c139f4d3f7dc4fccdec3327d83d5dabf7638f9c63",
+        "0ab8af5c82d9cbc123c584f7e4d3f716ba1503d01b9a9705f3876c7387872de5"
+      ],
+      "root": "2bb71d3cfc2b2d4a2274995b97fb76e6b159a4dbc8893720c2c695131db89be9"
+    },
+    {
+      "why": "same entry under another distribution",
+      "leaf": "63678d9b3a0a6deb6467c866e4cf3b3e7a03da26a0f5d091e1a17c959918004b",
+      "proof": [
+        "f1c38be49b7d638f3829859c139f4d3f7dc4fccdec3327d83d5dabf7638f9c63",
+        "0ab8af5c82d9cbc123c584f7e4d3f716ba1503d01b9a9705f3876c7387872de5"
+      ],
+      "root": "2bb71d3cfc2b2d4a2274995b97fb76e6b159a4dbc8893720c2c695131db89be9"
+    },
+    {
+      "why": "proof from another list",
+      "leaf": "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+      "proof": [
+        "a007a278f2d7bf815902cc928a2b3e2398a18a10d5d5c4c2e5d76973170b1ef9"
+      ],
+      "root": "2bb71d3cfc2b2d4a2274995b97fb76e6b159a4dbc8893720c2c695131db89be9"
+    },
+    {
+      "why": "proof longer than the maximum",
+      "leaf": "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+      "proof": [
+        "f1c38be49b7d638f3829859c139f4d3f7dc4fccdec3327d83d5dabf7638f9c63",
+        "0ab8af5c82d9cbc123c584f7e4d3f716ba1503d01b9a9705f3876c7387872de5",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed",
+        "d7eda984d9fd928bf99d65e0fed0b99f0cbe91bd162070a15390fa188042f7ed"
+      ],
+      "root": "2bb71d3cfc2b2d4a2274995b97fb76e6b159a4dbc8893720c2c695131db89be9"
+    }
+  ]
+}

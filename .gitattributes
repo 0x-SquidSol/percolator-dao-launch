@@ -6,3 +6,4 @@ private/** filter=blockprivate
 # Shell scripts and hooks must keep Unix line endings on every platform.
 *.sh text eol=lf
 .githooks/* text eol=lf
+*.json text eol=lf

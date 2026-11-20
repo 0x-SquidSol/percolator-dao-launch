@@ -30,6 +30,11 @@ jobs:
           GUARD_PATTERNS: ${{ secrets.GUARD_PATTERNS }}
         run: python3 scripts/guards/guard.py tree
 
+      - name: Claim-list spec (reference tests, vectors up to date)
+        run: |
+          python3 -m unittest discover -s scripts/spec -p "test_*.py" -v
+          python3 scripts/spec/merkle_reference.py check
+
       - name: Provenance guard (no BSL-licensed MetaDAO material)
         run: python3 scripts/guards/provenance.py tree
 
