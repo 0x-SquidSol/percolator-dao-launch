@@ -498,6 +498,7 @@ dependencies = [
 name = "dao_common"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "solana-program",
 ]
 

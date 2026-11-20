@@ -15,3 +15,7 @@ workspace = true
 [dependencies]
 # Latest 1.17 patch; Anchor 0.29 needs 1.17 (MetaDAO's lockfile has 1.17.14).
 solana-program = "=1.17.34"
+
+[dev-dependencies]
+# Reads the shared claim-list vectors in tests; same version solana-program uses.
+serde_json = "=1.0.154"
