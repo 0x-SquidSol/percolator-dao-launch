@@ -3,6 +3,7 @@ name = "dao_common"
 version = "0.1.0"
 description = "Shared helpers for the experiment's on-chain programs (experimental, unaudited)"
 edition = "2021"
+rust-version = "1.78"
 publish = false
 
 [lib]
@@ -10,3 +11,7 @@ path = "src/lib.rs"
 
 [lints]
 workspace = true
+
+[dependencies]
+# Latest 1.17 patch; Anchor 0.29 needs 1.17 (MetaDAO's lockfile has 1.17.14).
+solana-program = "=1.17.34"

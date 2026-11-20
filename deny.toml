@@ -12,13 +12,26 @@ version = 2
 # Known security advisories, unmaintained and yanked crates fail the check.
 yanked = "deny"
 unmaintained = "all"
-ignore = []
+# Accepted advisories, all inside solana-program 1.17 (required by Anchor
+# 0.29; MetaDAO ships the same tree). None can be fixed without leaving
+# Anchor 0.29. Revisit whenever the Solana/Anchor versions change.
+ignore = [
+    { id = "RUSTSEC-2024-0344", reason = "curve25519-dalek 3.2.1 timing variability in scalar subtraction; matters only when handling secret scalars (signing). On-chain programs hold no secret keys; the fix (4.1.3) needs a newer solana-program than Anchor 0.29 allows." },
+    { id = "RUSTSEC-2025-0141", reason = "bincode unmaintained (no known vulnerability); used by solana-program 1.17." },
+    { id = "RUSTSEC-2024-0436", reason = "paste unmaintained (no known vulnerability); compile-time macro used by solana-program 1.17." },
+    { id = "RUSTSEC-2024-0388", reason = "derivative unmaintained (no known vulnerability); compile-time macro used by solana-program 1.17." },
+    { id = "RUSTSEC-2025-0161", reason = "libsecp256k1 unmaintained (no known vulnerability); used by solana-program 1.17 for secp256k1 recovery." },
+    { id = "RUSTSEC-2026-0248", reason = "im unmaintained (no known vulnerability); used by solana-program 1.17 (frozen ABI)." },
+    { id = "RUSTSEC-2026-0247", reason = "bitmaps unmaintained (no known vulnerability); dependency of im." },
+    { id = "RUSTSEC-2026-0251", reason = "sized-chunks unmaintained (no known vulnerability); dependency of im." },
+]
 
 [licenses]
 version = 2
 confidence-threshold = 0.93
-# Permissive licenses only. Business Source License, unknown licenses and
-# anything not listed fail the check. AGPL (needed by the Squads v4 crate)
+# Permissive licenses only, plus the narrow per-crate exceptions below.
+# Business Source License, unknown licenses and anything not listed fail the
+# check. AGPL (needed by the Squads v4 crate)
 # is added only after legal advice.
 allow = [
     "Apache-2.0",
@@ -30,6 +43,15 @@ allow = [
     "Unicode-3.0",
 ]
 unused-allowed-license = "allow"
+
+# MPL-2.0 (weak copyleft: changes to those files must be shared) is allowed
+# only for these unmodified dependencies of solana-program 1.17, not in
+# general, so any new MPL dependency is still flagged for review.
+exceptions = [
+    { name = "im", allow = ["MPL-2.0"] },
+    { name = "bitmaps", allow = ["MPL-2.0"] },
+    { name = "sized-chunks", allow = ["MPL-2.0"] },
+]
 
 # This repository's own crates are not published and are checked in review.
 [licenses.private]

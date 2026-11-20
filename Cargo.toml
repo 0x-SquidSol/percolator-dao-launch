@@ -3,6 +3,12 @@
 members = ["programs/*", "crates/*"]
 exclude = ["programs/README.md", "crates/README.md"]
 resolver = "2"
+# Builds use Rust 1.78 (see rust-toolchain.toml), but many newer crate
+# versions need a newer Rust. Update the lockfile with Rust-version-aware
+# resolution, then rebuild on 1.78:
+#   CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback cargo +stable update
+# Pinned by hand in Cargo.lock: blake3 1.8.2 (newer pulls cpufeatures 0.3,
+# which needs a newer Cargo; same version as MetaDAO's lockfile).
 
 # Lints every crate opts into with `[lints] workspace = true`.
 [workspace.lints.rust]
