@@ -12,7 +12,8 @@
     "test": "mocha --import=tsx --bail \"tests/**/*.test.ts\" --timeout 10000",
     "typecheck": "tsc --noEmit",
     "test-wallet": "tsx scripts/test-wallet.ts",
-    "fixtures": "tsx scripts/fetch-fixtures.ts"
+    "fixtures": "tsx scripts/fetch-fixtures.ts",
+    "merkle-differential": "tsx scripts/merkle-differential.ts"
   },
   "devDependencies": {
     "@coral-xyz/anchor": "0.29.0",

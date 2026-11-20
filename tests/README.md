@@ -28,6 +28,7 @@ mocha. They run on Linux (WSL on Windows), the same as CI.
 ```sh
 yarn test        # all tests
 yarn typecheck   # type-check tests and scripts
+yarn merkle-differential   # TypeScript vs Rust claim lists (needs cargo)
 ```
 
 CI runs both on every push (`.github/workflows/typescript.yml`), along with

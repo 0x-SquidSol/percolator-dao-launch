@@ -65,3 +65,27 @@ jobs:
         run: |
           set -o pipefail
           { yarn audit --json || true; } | python3 scripts/guards/js_audit.py yarn-audit-allowlist.json
+
+  # The TypeScript claim-list code and the Rust verifier must agree on
+  # random lists in both directions (scripts/merkle-differential.ts). The
+  # random seed is printed so a failure can be replayed.
+  merkle-differential:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+
+      - name: Use the pinned yarn
+        run: corepack enable && yarn --version
+
+      - name: Install (exact lockfile, no install scripts)
+        run: yarn install --frozen-lockfile --non-interactive
+
+      - name: TypeScript and Rust agree on random claim lists
+        run: yarn merkle-differential
