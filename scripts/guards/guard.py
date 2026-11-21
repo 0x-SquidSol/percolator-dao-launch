@@ -22,6 +22,10 @@ import re
 import subprocess
 import sys
 
+# Make the sibling module importable however the script is started.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import textscan  # noqa: E402
+
 PATTERNS_FILE = os.path.join("private", "guard-patterns.txt")
 
 ALLOWED_EMAIL = re.compile(
@@ -96,15 +100,29 @@ def check_path(path, patterns, problems):
 
 
 def check_text(label, data, patterns, problems):
-    if b"\0" in data[:8000]:
-        return  # binary file
-    text = data.decode("utf-8", errors="replace")
-    if SECRET_KEY_ARRAY.search(text):
-        problems.append(f"{label}: looks like a secret key (64-number array)")
-    for number, line in enumerate(text.splitlines(), 1):
-        for index, pattern in enumerate(patterns, 1):
-            if pattern.search(line):
-                problems.append(f"{label}:{number}: matches private pattern #{index}")
+    """Checks every readable view of the data (see textscan.py), so text in
+    UTF-16, UTF-32, other encodings or inside binary files is checked too.
+    A pattern matches if it matches any single line, the same rule as for
+    plain text. Reports never include the matched text."""
+    if len(data) > textscan.MAX_SCAN_BYTES:
+        problems.append(f"{label}: too large to inspect (over 25 MB)")
+        return
+    key_found = False
+    reported = set()  # patterns already reported for this file
+    for view, text in textscan.text_views(data):
+        if not key_found and SECRET_KEY_ARRAY.search(text):
+            key_found = True
+            problems.append(f"{label}: looks like a secret key (64-number array)")
+        for number, line in enumerate(text.splitlines(), 1):
+            for index, pattern in enumerate(patterns, 1):
+                if view and index in reported:
+                    continue
+                if pattern.search(line):
+                    reported.add(index)
+                    if view:
+                        problems.append(f"{label}: matches private pattern #{index} (read as {view})")
+                    else:
+                        problems.append(f"{label}:{number}: matches private pattern #{index}")
 
 
 def check_email(label, email, problems):
@@ -131,9 +149,10 @@ def mode_staged(patterns):
 def mode_message(patterns, message_file):
     problems = []
     with open(message_file, "rb") as handle:
-        text = handle.read().decode("utf-8", errors="replace")
-    lines = [line for line in text.splitlines() if not line.startswith("#")]
-    check_text("commit message", "\n".join(lines).encode(), patterns, problems)
+        raw = handle.read()
+    # The whole message, comment lines included (git keeps "#" lines in some
+    # cleanup modes), as raw bytes so every encoding view applies.
+    check_text("commit message", raw, patterns, problems)
     branch = git("symbolic-ref", "--short", "-q", "HEAD", check=False).decode().strip()
     if branch:
         check_name("branch name", branch, patterns, problems)
@@ -150,17 +169,43 @@ def mode_tree(patterns):
     return problems
 
 
+def commit_bodies(shas):
+    """Each commit's message as raw bytes, read in one `git cat-file --batch`
+    call. Refuses (exits) on anything unexpected rather than skipping."""
+    if not shas:
+        return {}
+    result = subprocess.run(
+        ["git", "cat-file", "--batch"],
+        input=("\n".join(shas) + "\n").encode(), capture_output=True,
+    )
+    if result.returncode != 0:
+        sys.exit("guard: refusing, 'git cat-file' failed (fetch or check the repository)")
+    out, pos, bodies = result.stdout, 0, {}
+    for sha in shas:
+        end = out.find(b"\n", pos)
+        header = out[pos:end].split() if end >= 0 else []
+        if len(header) != 3 or header[0].decode() != sha or header[1] != b"commit":
+            sys.exit("guard: refusing, could not read a commit object")
+        size = int(header[2])
+        raw = out[end + 1:end + 1 + size]
+        pos = end + 1 + size + 1  # content, then a newline
+        bodies[sha] = raw.split(b"\n\n", 1)[1] if b"\n\n" in raw else b""
+    return bodies
+
+
 def mode_commits(patterns, revision_range):
     """Check every commit, not just the final files: a leak added and then
     removed in the same push would otherwise stay public in history."""
     problems = []
-    log = git("log", "--format=%H%x00%ae%x00%ce%x00%B%x1e", revision_range)
-    for record in filter(str.strip, log.decode("utf-8", errors="replace").split("\x1e")):
-        sha, author, committer, body = record.strip("\n").split("\0", 3)
+    log = git("log", "--format=%H%x00%ae%x00%ce", revision_range).decode("utf-8", errors="replace")
+    commits = [line.split("\0") for line in log.splitlines() if line]
+    bodies = commit_bodies([sha for sha, _, _ in commits])
+    for sha, author, committer in commits:
         short = sha[:10]
         check_email(f"commit {short} author", author, problems)
         check_email(f"commit {short} committer", committer, problems)
-        check_text(f"commit {short} message", body.encode(), patterns, problems)
+        # The message exactly as stored, so every encoding view applies.
+        check_text(f"commit {short} message", bodies[sha], patterns, problems)
         # -m: for merge commits, list files that differ from each parent, so
         # content introduced while resolving a merge is checked too.
         changed = git("diff-tree", "--no-commit-id", "-r", "-m", "--root", "-z",

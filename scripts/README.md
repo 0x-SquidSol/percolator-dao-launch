@@ -19,6 +19,14 @@ private material:
 Messages never print the matched text (file names that match are hidden too),
 so hook output and CI logs stay clean.
 
+Content checks never skip a file for not being plain UTF-8: every file is
+also read as UTF-16, UTF-32, Windows "ANSI" text and with NUL bytes removed
+(`guards/textscan.py`), so text in other encodings and inside binary files is
+checked too. Files over 25 MB are refused. Ordinary text costs the same as
+before; large non-text files take longer (about two seconds per MB). Not
+inspected yet: compressed or encoded content, such as zip-based formats, PDF
+streams and base64.
+
 They run in three places:
 - **on every commit** (pre-commit and commit-msg hooks);
 - **before every push** (pre-push hook): ref names, plus every commit being
