@@ -94,15 +94,19 @@ class ProvenanceTest(unittest.TestCase):
             'pub const USDC: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";\n',
         )
 
-    def test_markdown_skipped(self):
+    def test_license_discussion_doc_may_mention_the_license(self):
         self.assertAllowed("docs/research.md", "MetaDAO moved to the Business Source License 1.1.\n")
+
+    def test_other_markdown_mentioning_the_license_blocked(self):
+        self.assertBlocked("docs/notes.md", "MetaDAO moved to the Business Source License 1.1.\n")
 
     def test_non_markdown_docs_still_checked(self):
         self.assertBlocked("docs/notes.txt", "Business Source License 1.1\n")
 
-    def test_binary_file_skipped(self):
+    def test_binary_file_checked(self):
+        # Binary files used to be skipped (issue #4); they are checked now.
         self.stage("fixtures/x.bin", "\0Business Source License 1.1")
-        self.assertEqual(self.run_guard("staged").returncode, 0)
+        self.assertNotEqual(self.run_guard("staged").returncode, 0)
 
     # --- commit history (pre-push hook and CI) ---
 

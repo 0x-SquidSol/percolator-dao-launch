@@ -62,10 +62,18 @@ before committing. Avoid `git add -A` and `git add .`.
 ## Provenance guard (`guards/provenance.py`)
 
 Only MetaDAO's LGPL releases may be used here (see `PROVENANCE.md`). This
-guard refuses code or config containing Business Source License text,
-addresses that exist only in MetaDAO's BSL-era programs (their program IDs
-and hard-coded admin keys), or MetaDAO's npm packages. Markdown is skipped,
-because our docs discuss MetaDAO's license and programs by name.
+guard refuses files containing Business Source License text, addresses that
+exist only in MetaDAO's BSL-era programs (their program IDs and hard-coded
+admin keys), or MetaDAO's npm packages. Every file is checked, in every
+encoding view, like the leak guard.
+
+Docs may *discuss* the license: naming it, or its extra-use grant, in a
+sentence is allowed only in `docs/research.md` (an exact list in the guard,
+which can never include a license-named file). Wording that only a real
+copy of the license contains (its title on a line of its own, its parameter
+lines, its copyright line, its SPDX identifier, its licensor line) and
+every address and package name are refused in every file, with no
+exceptions. The exact markers are in `guards/provenance.py`.
 
 It runs **on every commit** (pre-commit hook), **before every push** over
 each commit being pushed (including merges and rebases, which skip the

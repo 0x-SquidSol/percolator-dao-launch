@@ -9,8 +9,19 @@ when code or config contains:
     IDs and hard-coded admin keys);
   - MetaDAO's published npm packages, which are built from the BSL code.
 
-Markdown is skipped: our docs discuss MetaDAO's license and programs by
-name. This file and its tests are skipped because they hold the markers.
+Every file is checked, in every readable view (see textscan.py), so text in
+UTF-16, other encodings or binary files is checked too. Matching is per line.
+
+Docs may discuss the license: the loose phrases "Business Source License
+1.1" and "Additional Use Grant" are allowed only in the exact files in
+LICENSE_DISCUSSION, and only in their plain UTF-8 view. Wording that only a
+real copy of the license contains (its title alone on a line, its parameter
+lines, its MariaDB copyright line, BUSL-1.1, "Licensor: MetaDAO") and every
+address and npm marker are checked in every file, with no exceptions. This
+file and its tests are skipped by exact path because they hold the markers.
+
+It is a tripwire, not proof of clean authorship: a phrase split across two
+lines, or reworded, is not caught.
 
 Usage:
   provenance.py tree                     every tracked file
@@ -20,16 +31,32 @@ Usage:
                                          hook and CI), so material added and
                                          later removed is still caught
 """
+import os
 import re
 import subprocess
 import sys
 
+# Make the sibling module importable however the script is started.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import textscan  # noqa: E402
+
+# (label, pattern, allowed in LICENSE_DISCUSSION files)
 MARKERS = [
-    ("BSL license text", re.compile(r"Business Source License 1\.1")),
-    ("BSL license text", re.compile(r"\bBUSL-1\.1\b")),
-    ("BSL license text", re.compile(r"Additional Use Grant")),
-    ("BSL license text", re.compile(r"Licensor:\s+MetaDAO")),
-    ("MetaDAO npm package", re.compile(r"@metadaoproject/")),
+    # Only in real copies of the license: blocked everywhere.
+    ("BSL license text", re.compile(r"\bBUSL-1\.1\b", re.I), False),
+    ("BSL license text", re.compile(r"Licensor:\s+MetaDAO", re.I), False),
+    ("BSL license text", re.compile(r"MariaDB\s+Corporation", re.I), False),
+    ("BSL license text", re.compile(r"^[\s#>*_]*Business\s+Source\s+License\s+1\.1[\s*_]*$", re.I), False),
+    # Parameter lines whose names appear in little but the BSL itself.
+    # ("Change Date" and a bare "Licensor" are left out: changelogs and
+    # other licenses use them. "Licensor: MetaDAO" has its own marker.)
+    ("BSL license text", re.compile(
+        r"^[\s>*_|-]*(Licensed\s+Work|Additional\s+Use\s+Grant|Change\s+License)"
+        r"[\s*_]*[:|]", re.I), False),
+    # Loose mentions: allowed only where the license is discussed.
+    ("BSL license text", re.compile(r"Business\s+Source\s+License\s+1\.1", re.I), True),
+    ("BSL license text", re.compile(r"Additional\s+Use\s+Grant", re.I), True),
+    ("MetaDAO npm package", re.compile(r"@metadaoproject/", re.I), False),
 ]
 
 # Program IDs and hard-coded admin keys from MetaDAO's BSL-era programs
@@ -54,11 +81,32 @@ BSL_ADDRESSES = [
     "EP3SoC2SvR3d4c2eXVBvhEMWSr2j3YtoCY3UMiQV7BPD",  # DAO initializer key
 ]
 for address in BSL_ADDRESSES:
-    MARKERS.append(("MetaDAO BSL-era address", re.compile(re.escape(address))))
+    # Case-sensitive: base58 addresses differ by case.
+    MARKERS.append(("MetaDAO BSL-era address", re.compile(re.escape(address)), False))
 
-SKIPPED = re.compile(
-    r"(?i)(\.md$|^scripts/guards/provenance\.py$|^scripts/guards/test_provenance\.py$)"
-)
+# Exact paths only. These hold the markers themselves.
+SKIPPED = frozenset({
+    "scripts/guards/provenance.py",
+    "scripts/guards/test_provenance.py",
+    "scripts/guards/test_provenance_encodings.py",
+})
+
+# Exact paths of docs that discuss MetaDAO's license (loose mentions only).
+LICENSE_DISCUSSION = frozenset({"docs/research.md"})
+
+# A license file can never be exempt, whatever its extension.
+LICENSE_NAME = re.compile(r"(?i)^(un)?licen[cs]e|^notice|^copying|^copyright")
+
+
+def check_exemptions(paths):
+    """Refuses to run if a license-discussion exception is not a doc under
+    docs/ or is named like a license file."""
+    for exempt in paths:
+        if not exempt.startswith("docs/") or LICENSE_NAME.search(exempt.rsplit("/", 1)[-1]):
+            sys.exit(f"provenance: refusing, {exempt} cannot be a license-discussion exception")
+
+
+check_exemptions(LICENSE_DISCUSSION)
 
 
 def git(*args):
@@ -95,13 +143,26 @@ def check_commits(rev_list_args, problems):
 
 
 def check(path, data, problems):
-    if SKIPPED.search(path) or b"\0" in data:
+    if path in SKIPPED:
         return
-    text = data.decode("utf-8", errors="replace")
-    for number, line in enumerate(text.splitlines(), start=1):
-        for label, pattern in MARKERS:
-            if pattern.search(line):
-                problems.append(f"{path}:{number}: {label}")
+    if len(data) > textscan.MAX_SCAN_BYTES:
+        problems.append(f"{path}: too large to inspect (over 25 MB)")
+        return
+    discussion = path in LICENSE_DISCUSSION
+    reported = set()  # markers already reported for this file
+    for view, text in textscan.text_views(data):
+        for number, line in enumerate(text.splitlines(), start=1):
+            for index, (label, pattern, discussable) in enumerate(MARKERS):
+                if view and index in reported:
+                    continue
+                if discussion and discussable and not view:
+                    continue  # a loose mention in a license-discussion doc
+                if pattern.search(line):
+                    reported.add(index)
+                    message = (f"{path}: {label} (read as {view})" if view
+                               else f"{path}:{number}: {label}")
+                    if message not in problems:  # two markers can hit one line
+                        problems.append(message)
 
 
 def main(argv):
