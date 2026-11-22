@@ -38,6 +38,19 @@ jobs:
       - name: Provenance guard (no BSL-licensed MetaDAO material)
         run: python3 scripts/guards/provenance.py tree
 
+      # Defence in depth only. A tag can point at a blob or tree, which the
+      # commit scans below never see. The real protection is the pre-push
+      # hook (GitHub most likely runs no workflow at all for a tag of a blob
+      # or tree); this checks any tag that does reach CI leads to a commit.
+      - name: Pushed tag points at a commit
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GUARD_PATTERNS: ${{ secrets.GUARD_PATTERNS }}
+          PUSHED_REF: ${{ github.ref }}
+        run: |
+          python3 scripts/guards/guard.py commits "$PUSHED_REF"
+          python3 scripts/guards/provenance.py commits "$PUSHED_REF"
+
       - name: Scan every pushed commit (identities, messages, files, provenance)
         env:
           GUARD_PATTERNS: ${{ secrets.GUARD_PATTERNS }}

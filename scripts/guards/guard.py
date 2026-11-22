@@ -211,6 +211,7 @@ def mode_commits(patterns, revision_range):
     """Check every commit, not just the final files: a leak added and then
     removed in the same push would otherwise stay public in history."""
     problems = []
+    gitfiles.require_commits(revision_range.split())
     log = git("log", "--format=%H%x00%ae%x00%ce", revision_range).decode("utf-8", errors="replace")
     commits = [line.split("\0") for line in log.splitlines() if line]
     bodies = commit_bodies([sha for sha, _, _ in commits])

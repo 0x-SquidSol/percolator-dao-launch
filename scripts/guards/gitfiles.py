@@ -123,6 +123,26 @@ def in_index():
     return entries, refusals
 
 
+def require_commits(rev_args):
+    """Refuses unless every revision named in rev_args is a commit, or a tag
+    (or chain of tags) of one. git log and rev-list list nothing for a blob
+    or tree, so without this a pushed ref pointing at one would look clean.
+    git itself parses the arguments (ranges, --not, --remotes, ...)."""
+    resolved = _git("rev-parse", "--revs-only", *rev_args).decode("ascii").split()
+    if not any(not sha.startswith("^") for sha in resolved):
+        # Nothing being pushed was named (e.g. an unknown name git dropped).
+        sys.exit("guard: refusing, found no commit to check")
+    for sha in resolved:
+        excluded = sha.startswith("^")
+        # Excluded revisions (already on the remote) only have to exist;
+        # everything being pushed must peel to a commit.
+        target = sha[1:] if excluded else sha + "^{commit}"
+        check = ["cat-file", "-e", target] if excluded else ["rev-parse", "--verify", "-q", target]
+        if subprocess.run(["git", *check], capture_output=True).returncode != 0:
+            # No ref name or id: either could match a private pattern.
+            sys.exit("guard: refusing, a pushed object is not a commit (or a tag of one)")
+
+
 class Blobs:
     """Reads blobs through one long-lived `git cat-file --batch`, one request
     at a time (no --buffer, so git answers each request immediately and the

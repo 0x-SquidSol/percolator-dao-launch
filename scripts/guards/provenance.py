@@ -138,6 +138,7 @@ def check_listing(prefix, listing, problems, blobs):
 
 
 def check_commits(rev_list_args, problems):
+    gitfiles.require_commits(rev_list_args)
     commits = git("rev-list", *rev_list_args).decode("utf-8").split()
     with gitfiles.Blobs() as blobs:
         for commit in commits:
