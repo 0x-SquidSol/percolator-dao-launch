@@ -22,11 +22,15 @@ printf '%s\n' "$updates" | while read -r local_ref local_sha remote_ref remote_s
   [ -n "$local_sha" ] || continue
   [ "$local_sha" = "$zero" ] && continue  # deleting a ref: nothing to scan
   if [ "$remote_sha" = "$zero" ]; then
-    range="$local_sha --not --remotes"    # new ref: commits not yet on the remote
+    # New ref: check all of its history, as guard.py does. Local tracking
+    # refs can't be trusted to say what the remote already has (another
+    # remote's refs, stale or hand-made refs).
+    range="$local_sha"
   else
+    # Existing ref: git passes the remote's real tip, so only new commits.
     range="$remote_sha..$local_sha"
   fi
-  # $range is unquoted on purpose: it holds commit IDs and git options.
+  # $range is unquoted on purpose: it may be a two-dot range of commit IDs.
   "$PY" scripts/guards/provenance.py commits $range || exit 1
   gitleaks git --config .gitleaks.toml --redact --no-banner \
     --log-opts="$range" . || exit 1
