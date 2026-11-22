@@ -24,7 +24,7 @@ It is a tripwire, not proof of clean authorship: a phrase split across two
 lines, or reworded, is not caught.
 
 Usage:
-  provenance.py tree                     every tracked file
+  provenance.py tree                     every file in the index (as stored)
   provenance.py staged                   staged changes (pre-commit hook)
   provenance.py commits <rev-list args>  files added or changed by each
                                          commit, as of that commit (pre-push
@@ -38,6 +38,7 @@ import sys
 
 # Make the sibling module importable however the script is started.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gitfiles  # noqa: E402
 import textscan  # noqa: E402
 
 # (label, pattern, allowed in LICENSE_DISCUSSION files)
@@ -116,30 +117,31 @@ def git(*args):
     return result.stdout
 
 
-def tracked_files():
-    return [p for p in git("ls-files", "-z").decode("utf-8").split("\0") if p]
-
-
-def staged_files():
-    out = git("diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR")
-    return [p for p in out.decode("utf-8").split("\0") if p]
-
-
-def commit_files(commit):
-    out = git(
-        "diff-tree", "--no-commit-id", "-r", "-m", "--root", "-z",
-        "--name-only", "--diff-filter=ACMR", commit,
-    )
-    return sorted({p for p in out.decode("utf-8").split("\0") if p})
+def check_listing(prefix, listing, problems, blobs):
+    """Checks entries from gitfiles by their stored content, and reports
+    every refusal (submodules, unmerged or unknown entries)."""
+    entries, refusals = listing
+    for refusal in refusals:
+        # The name isn't printed: it could match a private pattern, which
+        # only the leak guard can hide (it reports the same refusal first).
+        problems.append(f"{prefix}an entry was refused: {refusal.reason}")
+    for entry in entries:
+        if entry.path in SKIPPED:
+            continue
+        data = blobs.read(entry.sha)
+        found = []
+        if data is None:
+            found.append(f"{entry.path}: too large to inspect (over 25 MB)")
+        else:
+            check(entry.path, data, found)
+        problems.extend(f"{prefix}{problem}" for problem in found)
 
 
 def check_commits(rev_list_args, problems):
     commits = git("rev-list", *rev_list_args).decode("utf-8").split()
-    for commit in commits:
-        for path in commit_files(commit):
-            found = []
-            check(path, git("show", f"{commit}:{path}"), found)
-            problems.extend(f"{commit[:12]} {problem}" for problem in found)
+    with gitfiles.Blobs() as blobs:
+        for commit in commits:
+            check_listing(f"{commit[:12]} ", gitfiles.in_commit(commit), problems, blobs)
 
 
 def check(path, data, problems):
@@ -173,13 +175,11 @@ def main(argv):
     elif len(argv) != 2:
         sys.exit(__doc__)
     elif mode == "tree":
-        for path in tracked_files():
-            data = read(path)
-            if data is not None:
-                check(path, data, problems)
+        with gitfiles.Blobs() as blobs:  # every file in the index, as stored
+            check_listing("", gitfiles.in_index(), problems, blobs)
     elif mode == "staged":
-        for path in staged_files():
-            check(path, git("show", f":{path}"), problems)
+        with gitfiles.Blobs() as blobs:
+            check_listing("", gitfiles.staged(), problems, blobs)
     else:
         sys.exit(__doc__)
     if problems:
@@ -189,15 +189,6 @@ def main(argv):
         print("Only MetaDAO's LGPL releases may be used. See PROVENANCE.md.", file=sys.stderr)
         return 1
     return 0
-
-
-def read(path):
-    """Working-tree content of a tracked file, or None if it is deleted."""
-    try:
-        with open(path, "rb") as handle:
-            return handle.read()
-    except FileNotFoundError:
-        return None
 
 
 if __name__ == "__main__":

@@ -1,0 +1,163 @@
+"""Which files the guards must check, and their content, read from git.
+
+Both guards use this module, so they always check the same entries:
+  - staged changes:  `git diff --cached`
+  - each commit:     `git diff-tree` against every parent
+  - every file:      the index (`git ls-files -s`), which is what the next
+                     commit publishes (in CI it equals HEAD)
+
+Changes are listed with --diff-filter=d (everything except deletions), so
+type changes (symlink <-> file) and any status git adds later are included,
+and with --no-renames, so each entry has exactly one path. Content is read
+by blob id through `git cat-file --batch`: the raw stored bytes, never the
+working tree, so a symlink is checked as the link text git stores.
+
+Fail closed: submodules (their content is in another repository), unmerged
+entries and any unknown mode or status are returned as refusals, never
+skipped, and any git error stops the guard.
+"""
+import subprocess
+import sys
+from typing import List, NamedTuple, Optional, Tuple
+
+import textscan
+
+CHECKABLE_MODES = {"100644", "100755", "120000"}  # file, executable, symlink
+CHECKABLE_STATUSES = set("ACMRT")
+ZERO_SHA = "0" * 40
+
+
+class Entry(NamedTuple):
+    path: str
+    mode: str
+    sha: str
+
+
+class Refusal(NamedTuple):
+    path: str
+    reason: str
+
+
+def _git(*args):
+    result = subprocess.run(["git", *args], capture_output=True)
+    if result.returncode != 0:
+        # Name only the git subcommand: its arguments may contain file names.
+        sys.exit(f"guard: refusing, 'git {args[0]}' failed (fetch or check the repository)")
+    return result.stdout
+
+
+def _path(raw):
+    """A file name from git, and whether it is valid UTF-8. Invalid names
+    are refused, shown with escapes rather than crashing the guard."""
+    try:
+        return raw.decode("utf-8"), True
+    except UnicodeDecodeError:
+        return raw.decode("utf-8", errors="backslashreplace"), False
+
+
+def _classify(path, mode, sha, status="A"):
+    if mode == "160000":
+        return Refusal(path, "submodule (its content cannot be checked)")
+    if status not in CHECKABLE_STATUSES:
+        return Refusal(path, f"unsupported change type {status}")
+    if mode not in CHECKABLE_MODES or sha == ZERO_SHA:
+        return Refusal(path, f"unsupported file mode {mode}")
+    return Entry(path, mode, sha)
+
+
+def _parse_raw(out) -> Tuple[List[Entry], List[Refusal]]:
+    """Parses `--raw -z` output: ":old new oldsha newsha status\\0path\\0"."""
+    fields = out.split(b"\0")
+    entries, refusals, seen = [], [], set()
+    i = 0
+    while i < len(fields) - 1:
+        meta = fields[i].decode("ascii")
+        if not meta.startswith(":"):
+            sys.exit("guard: refusing, unexpected 'git diff' output")
+        path, valid = _path(fields[i + 1])
+        i += 2
+        _, new_mode, _, new_sha, status = meta[1:].split(" ")
+        if len(new_sha) != 40:
+            sys.exit("guard: refusing, unexpected 'git diff' output (abbreviated id)")
+        if valid:
+            item = _classify(path, new_mode, new_sha, status[0])
+        else:
+            item = Refusal(path, "file name is not valid UTF-8")
+        key = (item.path, item.sha if isinstance(item, Entry) else item.reason)
+        if key in seen:  # merges list a file once per parent
+            continue
+        seen.add(key)
+        (entries if isinstance(item, Entry) else refusals).append(item)
+    return entries, refusals
+
+
+def staged():
+    return _parse_raw(_git(
+        "diff", "--cached", "--raw", "-z", "--no-abbrev", "--no-renames", "--diff-filter=d",
+    ))
+
+
+def in_commit(sha):
+    """Entries a commit adds or changes, against each of its parents."""
+    return _parse_raw(_git(
+        "diff-tree", "-r", "-m", "--root", "--no-commit-id", "--raw", "-z", "--no-abbrev",
+        "--no-renames", "--diff-filter=d", sha,
+    ))
+
+
+def in_index():
+    """Every entry in the index: "mode sha stage\\tpath\\0"."""
+    entries, refusals, refused = [], [], set()
+    for record in filter(None, _git("ls-files", "-s", "-z").split(b"\0")):
+        meta, raw_path = record.split(b"\t", 1)
+        mode, sha, stage = meta.decode("ascii").split(" ")
+        path, valid = _path(raw_path)
+        if not valid or stage != "0":
+            if path not in refused:  # an unmerged file has up to 3 stages
+                refused.add(path)
+                reason = "file name is not valid UTF-8" if not valid else "unmerged entry"
+                refusals.append(Refusal(path, reason))
+            continue
+        item = _classify(path, mode, sha)
+        (entries if isinstance(item, Entry) else refusals).append(item)
+    return entries, refusals
+
+
+class Blobs:
+    """Reads blobs through one long-lived `git cat-file --batch`, one request
+    at a time (no --buffer, so git answers each request immediately and the
+    two sides can't block each other). Use as a context manager."""
+
+    def __enter__(self):
+        self.proc = subprocess.Popen(
+            ["git", "cat-file", "--batch"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        )
+        return self
+
+    def read(self, sha) -> Optional[bytes]:
+        """The blob's bytes, or None if it is over textscan.MAX_SCAN_BYTES."""
+        self.proc.stdin.write(sha.encode("ascii") + b"\n")
+        self.proc.stdin.flush()
+        header = self.proc.stdout.readline().split()
+        if len(header) != 3 or header[0].decode("ascii") != sha or header[1] != b"blob":
+            sys.exit("guard: refusing, could not read a file from git")
+        size = int(header[2])
+        if size > textscan.MAX_SCAN_BYTES:
+            remaining = size + 1
+            while remaining:
+                chunk = self.proc.stdout.read(min(remaining, 1 << 20))
+                if not chunk:
+                    sys.exit("guard: refusing, could not read a file from git")
+                remaining -= len(chunk)
+            return None
+        data = self.proc.stdout.read(size + 1)
+        if len(data) != size + 1 or data[-1:] != b"\n":
+            sys.exit("guard: refusing, could not read a file from git")
+        return data[:-1]
+
+    def __exit__(self, *exc):
+        self.proc.stdin.close()
+        self.proc.stdout.read()
+        if self.proc.wait() != 0 and exc[0] is None:
+            sys.exit("guard: refusing, 'git cat-file' failed")
+        return False

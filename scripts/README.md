@@ -19,6 +19,15 @@ private material:
 Messages never print the matched text (file names that match are hidden too),
 so hook output and CI logs stay clean.
 
+Both guards read file content from git itself (`guards/gitfiles.py`), never
+from the working tree: `tree` checks every file in the index (what the next
+commit publishes; in CI the same as the last commit), symlinks are checked
+as the link text git stores, and changes of any kind except deletions are
+checked, including a file's type changing. Submodules are refused on
+purpose, because their content lives in another repository the guards
+can't read, as are unmerged entries and anything git reports in an
+unexpected way.
+
 Content checks never skip a file for not being plain UTF-8: every file is
 also read as UTF-16, UTF-32, Windows "ANSI" text and with NUL bytes removed
 (`guards/textscan.py`), so text in other encodings and inside binary files is

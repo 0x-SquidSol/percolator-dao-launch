@@ -24,6 +24,7 @@ import sys
 
 # Make the sibling module importable however the script is started.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gitfiles  # noqa: E402
 import textscan  # noqa: E402
 
 PATTERNS_FILE = os.path.join("private", "guard-patterns.txt")
@@ -135,12 +136,27 @@ def ident_email(variable):
     return match.group(1) if match else ""
 
 
+def check_entries(prefix, listing, patterns, problems, blobs):
+    """Checks the names and stored content of entries from gitfiles, and
+    reports every refusal (submodules, unmerged or unknown entries)."""
+    entries, refusals = listing
+    for refusal in refusals:
+        check_path(refusal.path, patterns, problems)
+        problems.append(f"{prefix}{shown(refusal.path, patterns)}: refused, {refusal.reason}")
+    for entry in entries:
+        check_path(entry.path, patterns, problems)
+        label = f"{prefix}{shown(entry.path, patterns)}"
+        data = blobs.read(entry.sha)
+        if data is None:
+            problems.append(f"{label}: too large to inspect (over 25 MB)")
+        else:
+            check_text(label, data, patterns, problems)
+
+
 def mode_staged(patterns):
     problems = []
-    names = git("diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z")
-    for path in filter(None, names.decode("utf-8").split("\0")):
-        check_path(path, patterns, problems)
-        check_text(shown(path, patterns), git("show", ":" + path), patterns, problems)
+    with gitfiles.Blobs() as blobs:
+        check_entries("", gitfiles.staged(), patterns, problems, blobs)
     check_email("author", ident_email("GIT_AUTHOR_IDENT"), problems)
     check_email("committer", ident_email("GIT_COMMITTER_IDENT"), problems)
     return problems
@@ -160,12 +176,10 @@ def mode_message(patterns, message_file):
 
 
 def mode_tree(patterns):
+    """Every file in the index, as stored (not the working tree)."""
     problems = []
-    for path in filter(None, git("ls-files", "-z").decode("utf-8").split("\0")):
-        check_path(path, patterns, problems)
-        if os.path.isfile(path):
-            with open(path, "rb") as handle:
-                check_text(shown(path, patterns), handle.read(), patterns, problems)
+    with gitfiles.Blobs() as blobs:
+        check_entries("", gitfiles.in_index(), patterns, problems, blobs)
     return problems
 
 
@@ -200,20 +214,16 @@ def mode_commits(patterns, revision_range):
     log = git("log", "--format=%H%x00%ae%x00%ce", revision_range).decode("utf-8", errors="replace")
     commits = [line.split("\0") for line in log.splitlines() if line]
     bodies = commit_bodies([sha for sha, _, _ in commits])
-    for sha, author, committer in commits:
-        short = sha[:10]
-        check_email(f"commit {short} author", author, problems)
-        check_email(f"commit {short} committer", committer, problems)
-        # The message exactly as stored, so every encoding view applies.
-        check_text(f"commit {short} message", bodies[sha], patterns, problems)
-        # -m: for merge commits, list files that differ from each parent, so
-        # content introduced while resolving a merge is checked too.
-        changed = git("diff-tree", "--no-commit-id", "-r", "-m", "--root", "-z",
-                      "--name-only", "--diff-filter=ACMR", sha)
-        for path in sorted(set(filter(None, changed.decode("utf-8").split("\0")))):
-            check_path(path, patterns, problems)
-            label = f"commit {short} {shown(path, patterns)}"
-            check_text(label, git("show", f"{sha}:{path}"), patterns, problems)
+    with gitfiles.Blobs() as blobs:
+        for sha, author, committer in commits:
+            short = sha[:10]
+            check_email(f"commit {short} author", author, problems)
+            check_email(f"commit {short} committer", committer, problems)
+            # The message exactly as stored, so every encoding view applies.
+            check_text(f"commit {short} message", bodies[sha], patterns, problems)
+            # Files each commit adds or changes against every parent (so
+            # content introduced while resolving a merge is checked too).
+            check_entries(f"commit {short} ", gitfiles.in_commit(sha), patterns, problems, blobs)
     return problems
 
 
