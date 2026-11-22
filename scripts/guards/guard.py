@@ -17,6 +17,7 @@ Usage:
                              messages, file names and file contents (CI)
   guard.py ref <name>        check a branch or tag name (CI)
 """
+import codecs
 import os
 import re
 import subprocess
@@ -136,22 +137,47 @@ def ident_email(variable):
     return match.group(1) if match else ""
 
 
-# A standard signature block appended to a signed tag: begin and end markers
-# with only armor headers and base64 lines between them.
-SIGNATURE_BLOCK = re.compile(
-    rb"-----BEGIN (PGP|SSH) SIGNATURE-----\r?\n"
-    rb"(?:[A-Za-z][A-Za-z-]*: [^\r\n]*\r?\n)*"  # armor headers (Version: ...)
-    rb"(?:\r?\n)?"
-    rb"(?:[A-Za-z0-9+/=]*\r?\n)*"               # base64 only
-    rb"-----END \1 SIGNATURE-----\r?\n?"
-)
+def check_tag(label, tag, patterns, problems):
+    """One annotated tag object, pushed or embedded in a merge commit: the
+    whole object as text (without a well-formed signature) and every tagger
+    email. Labels never use the tag's name, which could match a pattern."""
+    check_text(label, gitfiles.without_signature(tag.raw), patterns, problems)
+    if not tag.taggers:
+        problems.append(f"{label}: has no tagger")
+    for email in tag.taggers:
+        if email is None:
+            problems.append(f"{label}: tagger has no email")
+        else:
+            check_email(f"{label} tagger", email, problems)
 
 
-def without_signature(raw):
-    """The tag object without a well-formed signature block, whose random
-    base64 could match a short private pattern by chance. A block holding
-    anything else isn't matched, so it is still checked in full."""
-    return SIGNATURE_BLOCK.sub(b"", raw)
+def check_commit(short, raw, patterns, problems):
+    """Every part of a commit object (see gitfiles.parse_commit). Labels use
+    the short id and the part's role, never a header name or person."""
+    label = f"commit {short}"
+    commit = gitfiles.parse_commit(raw)
+    check_text(f"{label} headers", commit.text, patterns, problems)
+    for role, name, email in commit.idents:
+        check_text(f"{label} {role} name", name, patterns, problems)
+        check_email(f"{label} {role}", email, problems)
+    for number, embedded in enumerate(commit.mergetags, 1):
+        tag, _ = gitfiles.parse_tag(short, embedded)
+        check_tag(f"{label} mergetag {number}", tag, patterns, problems)
+    # The message exactly as stored, so every encoding view applies.
+    check_text(f"{label} message", commit.message, patterns, problems)
+    if commit.encoding is not None:
+        # Also read the names and message in the encoding the commit declares.
+        names = b"\n".join(name for _, name, _ in commit.idents)
+        try:
+            # Only real text encodings: codecs.lookup also accepts rot13,
+            # base64, hex, which can't decode bytes to text.
+            if not getattr(codecs.lookup(commit.encoding), "_is_text_encoding", True):
+                raise LookupError(commit.encoding)
+            declared = (names + b"\n" + commit.message).decode(commit.encoding, errors="replace")
+        except (LookupError, UnicodeError, ValueError):
+            problems.append(f"{label}: unknown text encoding, refused")
+            return
+        check_text(f"{label} (declared encoding)", declared.encode("utf-8"), patterns, problems)
 
 
 def check_entries(prefix, listing, patterns, problems, blobs):
@@ -175,8 +201,12 @@ def mode_staged(patterns):
     problems = []
     with gitfiles.Blobs() as blobs:
         check_entries("", gitfiles.staged(), patterns, problems, blobs)
-    check_email("author", ident_email("GIT_AUTHOR_IDENT"), problems)
-    check_email("committer", ident_email("GIT_COMMITTER_IDENT"), problems)
+    for role, variable in (("author", "GIT_AUTHOR_IDENT"), ("committer", "GIT_COMMITTER_IDENT")):
+        ident = git("var", variable)
+        name = ident.split(b" <", 1)[0]
+        # The configured name goes into the commit too (it reflects --author).
+        check_text(f"{role} name", name, patterns, problems)
+        check_email(role, ident_email(variable), problems)
     return problems
 
 
@@ -221,7 +251,7 @@ def commit_bodies(shas):
         size = int(header[2])
         raw = out[end + 1:end + 1 + size]
         pos = end + 1 + size + 1  # content, then a newline
-        bodies[sha] = raw.split(b"\n\n", 1)[1] if b"\n\n" in raw else b""
+        bodies[sha] = raw  # the whole commit object: headers and message
     return bodies
 
 
@@ -236,25 +266,16 @@ def mode_commits(patterns, revision_range):
         if revision.startswith("^"):
             continue  # already on the remote
         for tag in gitfiles.tag_chain(revision):
-            label = f"tag {tag.sha[:10]}"
-            check_text(label, without_signature(tag.raw), patterns, problems)
-            if not tag.taggers:
-                problems.append(f"{label}: has no tagger")
-            for email in tag.taggers:
-                if email is None:
-                    problems.append(f"{label}: tagger has no email")
-                else:
-                    check_email(f"{label} tagger", email, problems)
-    log = git("log", "--format=%H%x00%ae%x00%ce", revision_range).decode("utf-8", errors="replace")
-    commits = [line.split("\0") for line in log.splitlines() if line]
-    bodies = commit_bodies([sha for sha, _, _ in commits])
+            check_tag(f"tag {tag.sha[:10]}", tag, patterns, problems)
+    # Each commit is read whole from git (names, emails, every header and
+    # the message), not through git log's formatted fields.
+    # rev-list, not log: log.showSignature=true would add signature lines.
+    shas = git("rev-list", revision_range).decode("ascii").split()
+    bodies = commit_bodies(shas)
     with gitfiles.Blobs() as blobs:
-        for sha, author, committer in commits:
+        for sha in shas:
             short = sha[:10]
-            check_email(f"commit {short} author", author, problems)
-            check_email(f"commit {short} committer", committer, problems)
-            # The message exactly as stored, so every encoding view applies.
-            check_text(f"commit {short} message", bodies[sha], patterns, problems)
+            check_commit(short, bodies[sha], patterns, problems)
             # Files each commit adds or changes against every parent (so
             # content introduced while resolving a merge is checked too).
             check_entries(f"commit {short} ", gitfiles.in_commit(sha), patterns, problems, blobs)

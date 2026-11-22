@@ -144,6 +144,15 @@ class TagObjectTest(unittest.TestCase):
         sha = self.signed_tag("iQEzBAAB\nnotes ZZTEST-42 in plain words\n=AbCd\n")
         self.assert_blocked(sha, "private pattern")
 
+    def test_signature_comment_line_checked(self):
+        # Armor header lines are free text, so they are kept and checked.
+        body = (f"object {self.head}\ntype commit\ntag v1\n"
+                f"tagger Test <{GOOD_EMAIL}> 0 +0000\n\nrelease\n"
+                "-----BEGIN PGP SIGNATURE-----\nComment: ZZTEST-42\n\n"
+                "iQEzBAABCAAd==\n=AbCd\n-----END PGP SIGNATURE-----\n")
+        sha = self.git("hash-object", "-t", "tag", "-w", "--stdin", "--literally", data=body.encode())
+        self.assert_blocked(sha, "private pattern")
+
     def test_clean_annotated_tag_allowed(self):
         sha = self.tag(self.head)
         self.assertEqual(self.pre_push(sha).returncode, 0, self.pre_push(sha).stderr)

@@ -165,22 +165,121 @@ def tag_chain(sha) -> List[Tag]:
     for _ in range(MAX_TAG_CHAIN + 1):
         if _git("cat-file", "-t", sha).strip() != b"tag":
             return tags
-        raw = _git("cat-file", "tag", sha)
-        head, separator, _ = raw.partition(b"\n\n")
-        lines = head.split(b"\n")
-        objects = [line for line in lines if line.startswith(b"object ")]
-        types = [line for line in lines if line.startswith(b"type ")]
-        target = _OBJECT_LINE.fullmatch(objects[0]) if len(objects) == 1 else None
-        if not separator or target is None or len(types) != 1:
-            sys.exit("guard: refusing, could not read a tag object")
-        taggers = []
-        for line in lines:
-            if line.startswith(b"tagger "):
-                email = re.search(rb"<([^>]*)>", line)
-                taggers.append(email.group(1).decode("utf-8", errors="replace") if email else None)
-        tags.append(Tag(sha, raw, taggers))
-        sha = target.group(1).decode("ascii")
+        tag, target = parse_tag(sha, _git("cat-file", "tag", sha))
+        tags.append(tag)
+        sha = target
     sys.exit("guard: refusing, tag chain too deep")
+
+
+def parse_tag(sha, raw) -> Tuple[Tag, str]:
+    """A tag object and the id it points at. Used for pushed tags and for
+    tags embedded in merge commits (mergetag), so both get the same checks.
+    Refuses (exits) on a malformed tag."""
+    head, separator, _ = raw.partition(b"\n\n")
+    lines = head.split(b"\n")
+    objects = [line for line in lines if line.startswith(b"object ")]
+    types = [line for line in lines if line.startswith(b"type ")]
+    target = _OBJECT_LINE.fullmatch(objects[0]) if len(objects) == 1 else None
+    if not separator or target is None or len(types) != 1:
+        sys.exit("guard: refusing, could not read a tag object")
+    taggers = []
+    for line in lines:
+        if line.startswith(b"tagger "):
+            email = re.search(rb"<([^>]*)>", line)
+            taggers.append(email.group(1).decode("utf-8", errors="replace") if email else None)
+    return Tag(sha, raw, taggers), target.group(1).decode("ascii")
+
+
+# A standard signature block (as in a signed tag's message, or a commit's
+# gpgsig header once unfolded): begin and end markers with only armor
+# headers and base64 lines between them.
+SIGNATURE_BLOCK = re.compile(
+    rb"-----BEGIN (?P<kind>PGP|SSH) SIGNATURE-----\r?\n"
+    rb"(?P<armor>(?:[A-Za-z][A-Za-z-]*: [^\r\n]*\r?\n)*)"  # Version:, Comment:, ...
+    rb"(?:\r?\n)?"
+    rb"(?:[A-Za-z0-9+/=]*\r?\n)*"                         # base64 only
+    rb"-----END (?P=kind) SIGNATURE-----\r?\n?"
+)
+
+
+def without_signature(raw):
+    """raw with the random base64 of well-formed signature blocks removed,
+    since it could match a short private pattern by chance. The armor
+    header lines (Comment:, Version:, ...) are free text, so they are kept
+    and checked. A block holding anything else isn't matched at all, so it
+    is still checked in full."""
+    return SIGNATURE_BLOCK.sub(lambda block: block.group("armor"), raw)
+
+
+def unfold(head) -> List[Tuple[bytes, bytes]]:
+    """Header fields of a git object, as (key, value). A line starting with
+    one space continues the previous field; that space is removed and the
+    lines are joined with newlines. Refuses (exits) on anything else."""
+    fields: List[Tuple[bytes, bytes]] = []
+    for line in head.split(b"\n"):
+        if line.startswith(b" "):
+            if not fields:
+                sys.exit("guard: refusing, could not read a git object header")
+            key, value = fields[-1]
+            fields[-1] = (key, value + b"\n" + line[1:])
+            continue
+        key, space, value = line.partition(b" ")
+        if not space or not key:
+            sys.exit("guard: refusing, could not read a git object header")
+        fields.append((key, value))
+    return fields
+
+
+class Commit(NamedTuple):
+    text: bytes                         # header text to check (see parse_commit)
+    idents: List[Tuple[str, bytes, str]]  # (role, name, email) per author/committer
+    mergetags: List[bytes]              # embedded tag objects
+    message: bytes
+    encoding: Optional[str]             # declared by an `encoding` header
+
+
+_HEX_ID = re.compile(rb"[0-9a-f]{40}|[0-9a-f]{64}")
+# "Name <email> seconds +zone". The name may be empty (old or imported
+# commits); the email is always checked.
+_IDENT = re.compile(rb"(?:([^<>\n]*) )?<([^<>\n]*)> \d+ [+-]\d{4}")
+
+
+def parse_commit(raw) -> Commit:
+    """Splits a raw commit object into what the leak guard checks:
+      - every header as text, except well-formed tree/parent ids (pure hex)
+        and well-formed signature blocks, which are random by nature;
+      - each author/committer name and email (exactly one of each; git log
+        only shows the first, so a second could hide an address);
+      - each embedded tag (mergetag);
+      - the message, and any declared text encoding.
+    Refuses (exits) on anything that doesn't have the expected shape."""
+    head, separator, message = raw.partition(b"\n\n")
+    if not separator:
+        sys.exit("guard: refusing, could not read a commit object")
+    text, idents, mergetags, encoding = [], [], [], None
+    for key, value in unfold(head):
+        if key in (b"tree", b"parent") and _HEX_ID.fullmatch(value):
+            continue
+        if key in (b"author", b"committer"):
+            ident = _IDENT.fullmatch(value)
+            if ident is None:
+                sys.exit("guard: refusing, could not read a commit's author or committer")
+            email = ident.group(2).decode("utf-8", errors="replace")
+            idents.append((key.decode("ascii"), ident.group(1) or b"", email))
+            continue
+        if key in (b"gpgsig", b"gpgsig-sha256"):
+            text.append(without_signature(value + b"\n"))
+            continue
+        if key == b"mergetag":
+            mergetags.append(value + b"\n")
+            continue
+        if key == b"encoding":
+            encoding = value.decode("ascii", errors="replace")
+        text.append(key + b" " + value)
+    roles = sorted(role for role, _, _ in idents)
+    if roles != ["author", "committer"]:
+        sys.exit("guard: refusing, a commit needs exactly one author and one committer")
+    return Commit(b"\n".join(text), idents, mergetags, message, encoding)
 
 
 class Blobs:
