@@ -177,6 +177,55 @@ class CommitHeaderTest(unittest.TestCase):
         self.assert_allowed(self.commit())
         self.assert_blocked(self.commit(author="ZZTEST-42 Smith"), "private pattern")
 
+    def ident_commit(self, author_email=GOOD, committer_email=GOOD):
+        lines = (f"author Test <{author_email}> 0 +0000\n"
+                 f"committer Test <{committer_email}> 0 +0000\n").encode()
+        return self.raw_commit(lines)
+
+    def test_private_text_in_author_email_blocked(self):
+        # An allowed domain doesn't make the part before the @ safe.
+        sha = self.ident_commit(author_email="ZZTEST-42@users.noreply.github.com")
+        self.assert_blocked(sha, "private pattern")
+
+    def test_private_text_in_committer_email_blocked(self):
+        sha = self.ident_commit(committer_email="ZZTEST-42@users.noreply.github.com")
+        self.assert_blocked(sha, "private pattern")
+
+    def test_private_text_in_email_caught_at_commit_time(self):
+        for variable in ("GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"):
+            with self.subTest(variable=variable):
+                env = dict(self.env, **{variable: "ZZTEST-42@users.noreply.github.com"})
+                result = subprocess.run(
+                    [sys.executable, LEAK_GUARD, "staged"], cwd=self.dir,
+                    capture_output=True, text=True, env=env,
+                )
+                self.assertNotEqual(result.returncode, 0, result.stderr)
+                self.assertIn("private pattern", result.stderr)
+                self.assertNotIn("ZZTEST", result.stderr)
+
+    def test_unreadable_configured_identity_refused(self):
+        # git writes a 5-digit zone for this date, which the strict parse refuses.
+        self.git("add", "--all")
+        env = dict(self.env, GIT_AUTHOR_DATE="@100 -9999")
+        result = subprocess.run(
+            [sys.executable, LEAK_GUARD, "staged"], cwd=self.dir,
+            capture_output=True, text=True, env=env,
+        )
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("could not read the configured identity", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_email_in_declared_encoding_blocked(self):
+        self.env["GUARD_PATTERNS"] = "秘密計画\n"
+        lines = (b"author Test <" + "秘密計画".encode("shift_jis") + b"@users.noreply.github.com> 0 +0000\n"
+                 + f"committer Test <{GOOD}> 0 +0000\nencoding shift_jis\n".encode())
+        self.assert_blocked(self.raw_commit(lines), "declared encoding")
+
+    def test_report_never_shows_the_email(self):
+        sha = self.ident_commit(author_email="ZZTEST-42@users.noreply.github.com")
+        for result in self.run_both(sha):
+            self.assertNotIn("ZZTEST", result.stderr)
+
     def test_clean_commit_allowed(self):
         self.assert_allowed(self.commit())
 

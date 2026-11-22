@@ -132,9 +132,13 @@ def check_email(label, email, problems):
         problems.append(f"{label} email is not a project or GitHub noreply address")
 
 
-def ident_email(variable):
-    match = re.search(r"<([^>]*)>", git("var", variable).decode(errors="replace"))
-    return match.group(1) if match else ""
+def check_ident(label, name, email, patterns, problems):
+    """One author or committer, as stored bytes: name and email are free
+    text, so both get every check_text view, and the email must also be an
+    allowed address. Labels never show either."""
+    check_text(f"{label} name", name, patterns, problems)
+    check_text(f"{label} email", email, patterns, problems)
+    check_email(label, email.decode("utf-8", errors="replace"), problems)
 
 
 def check_tag(label, tag, patterns, problems):
@@ -158,16 +162,16 @@ def check_commit(short, raw, patterns, problems):
     commit = gitfiles.parse_commit(raw)
     check_text(f"{label} headers", commit.text, patterns, problems)
     for role, name, email in commit.idents:
-        check_text(f"{label} {role} name", name, patterns, problems)
-        check_email(f"{label} {role}", email, problems)
+        check_ident(f"{label} {role}", name, email, patterns, problems)
     for number, embedded in enumerate(commit.mergetags, 1):
         tag, _ = gitfiles.parse_tag(short, embedded)
         check_tag(f"{label} mergetag {number}", tag, patterns, problems)
     # The message exactly as stored, so every encoding view applies.
     check_text(f"{label} message", commit.message, patterns, problems)
     if commit.encoding is not None:
-        # Also read the names and message in the encoding the commit declares.
-        names = b"\n".join(name for _, name, _ in commit.idents)
+        # Also read the names, emails and message in the encoding the
+        # commit declares.
+        names = b"\n".join(part for _, name, email in commit.idents for part in (name, email))
         try:
             # Only real text encodings: codecs.lookup also accepts rot13,
             # base64, hex, which can't decode bytes to text.
@@ -202,11 +206,13 @@ def mode_staged(patterns):
     with gitfiles.Blobs() as blobs:
         check_entries("", gitfiles.staged(), patterns, problems, blobs)
     for role, variable in (("author", "GIT_AUTHOR_IDENT"), ("committer", "GIT_COMMITTER_IDENT")):
-        ident = git("var", variable)
-        name = ident.split(b" <", 1)[0]
-        # The configured name goes into the commit too (it reflects --author).
-        check_text(f"{role} name", name, patterns, problems)
-        check_email(role, ident_email(variable), problems)
+        # The configured identity is what goes into the commit (it reflects
+        # --author), read with the same strict parse as pushed commits.
+        ident = gitfiles.IDENT.fullmatch(git("var", variable).rstrip(b"\r\n"))
+        if ident is None:
+            problems.append(f"{role}: could not read the configured identity, refused")
+            continue
+        check_ident(role, ident.group(1) or b"", ident.group(2), patterns, problems)
     return problems
 
 

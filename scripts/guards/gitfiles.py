@@ -232,7 +232,7 @@ def unfold(head) -> List[Tuple[bytes, bytes]]:
 
 class Commit(NamedTuple):
     text: bytes                         # header text to check (see parse_commit)
-    idents: List[Tuple[str, bytes, str]]  # (role, name, email) per author/committer
+    idents: List[Tuple[str, bytes, bytes]]  # (role, name, email) as stored
     mergetags: List[bytes]              # embedded tag objects
     message: bytes
     encoding: Optional[str]             # declared by an `encoding` header
@@ -241,7 +241,7 @@ class Commit(NamedTuple):
 _HEX_ID = re.compile(rb"[0-9a-f]{40}|[0-9a-f]{64}")
 # "Name <email> seconds +zone". The name may be empty (old or imported
 # commits); the email is always checked.
-_IDENT = re.compile(rb"(?:([^<>\n]*) )?<([^<>\n]*)> \d+ [+-]\d{4}")
+IDENT = re.compile(rb"(?:([^<>\n]*) )?<([^<>\n]*)> \d+ [+-]\d{4}")
 
 
 def parse_commit(raw) -> Commit:
@@ -261,11 +261,10 @@ def parse_commit(raw) -> Commit:
         if key in (b"tree", b"parent") and _HEX_ID.fullmatch(value):
             continue
         if key in (b"author", b"committer"):
-            ident = _IDENT.fullmatch(value)
+            ident = IDENT.fullmatch(value)
             if ident is None:
                 sys.exit("guard: refusing, could not read a commit's author or committer")
-            email = ident.group(2).decode("utf-8", errors="replace")
-            idents.append((key.decode("ascii"), ident.group(1) or b"", email))
+            idents.append((key.decode("ascii"), ident.group(1) or b"", ident.group(2)))
             continue
         if key in (b"gpgsig", b"gpgsig-sha256"):
             text.append(without_signature(value + b"\n"))
