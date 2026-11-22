@@ -16,6 +16,7 @@ Fail closed: submodules (their content is in another repository), unmerged
 entries and any unknown mode or status are returned as refusals, never
 skipped, and any git error stops the guard.
 """
+import re
 import subprocess
 import sys
 from typing import List, NamedTuple, Optional, Tuple
@@ -141,6 +142,45 @@ def require_commits(rev_args):
         if subprocess.run(["git", *check], capture_output=True).returncode != 0:
             # No ref name or id: either could match a private pattern.
             sys.exit("guard: refusing, a pushed object is not a commit (or a tag of one)")
+    return resolved
+
+
+class Tag(NamedTuple):
+    sha: str
+    raw: bytes                    # the whole tag object, headers included
+    taggers: List[Optional[str]]  # email of each tagger line (None: no <...>)
+
+
+MAX_TAG_CHAIN = 32
+_OBJECT_LINE = re.compile(rb"object ([0-9a-f]{40}|[0-9a-f]{64})")
+
+
+def tag_chain(sha) -> List[Tag]:
+    """The annotated tag objects from sha down to the first object that is
+    not a tag (a tag of a tag yields both). Empty if sha is not a tag.
+    Refuses (exits) on a malformed tag or a chain deeper than
+    MAX_TAG_CHAIN. git log and rev-list peel straight past tag objects, so
+    this is the only place their own text is read."""
+    tags = []
+    for _ in range(MAX_TAG_CHAIN + 1):
+        if _git("cat-file", "-t", sha).strip() != b"tag":
+            return tags
+        raw = _git("cat-file", "tag", sha)
+        head, separator, _ = raw.partition(b"\n\n")
+        lines = head.split(b"\n")
+        objects = [line for line in lines if line.startswith(b"object ")]
+        types = [line for line in lines if line.startswith(b"type ")]
+        target = _OBJECT_LINE.fullmatch(objects[0]) if len(objects) == 1 else None
+        if not separator or target is None or len(types) != 1:
+            sys.exit("guard: refusing, could not read a tag object")
+        taggers = []
+        for line in lines:
+            if line.startswith(b"tagger "):
+                email = re.search(rb"<([^>]*)>", line)
+                taggers.append(email.group(1).decode("utf-8", errors="replace") if email else None)
+        tags.append(Tag(sha, raw, taggers))
+        sha = target.group(1).decode("ascii")
+    sys.exit("guard: refusing, tag chain too deep")
 
 
 class Blobs:

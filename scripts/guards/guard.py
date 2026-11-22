@@ -136,6 +136,24 @@ def ident_email(variable):
     return match.group(1) if match else ""
 
 
+# A standard signature block appended to a signed tag: begin and end markers
+# with only armor headers and base64 lines between them.
+SIGNATURE_BLOCK = re.compile(
+    rb"-----BEGIN (PGP|SSH) SIGNATURE-----\r?\n"
+    rb"(?:[A-Za-z][A-Za-z-]*: [^\r\n]*\r?\n)*"  # armor headers (Version: ...)
+    rb"(?:\r?\n)?"
+    rb"(?:[A-Za-z0-9+/=]*\r?\n)*"               # base64 only
+    rb"-----END \1 SIGNATURE-----\r?\n?"
+)
+
+
+def without_signature(raw):
+    """The tag object without a well-formed signature block, whose random
+    base64 could match a short private pattern by chance. A block holding
+    anything else isn't matched, so it is still checked in full."""
+    return SIGNATURE_BLOCK.sub(b"", raw)
+
+
 def check_entries(prefix, listing, patterns, problems, blobs):
     """Checks the names and stored content of entries from gitfiles, and
     reports every refusal (submodules, unmerged or unknown entries)."""
@@ -211,7 +229,22 @@ def mode_commits(patterns, revision_range):
     """Check every commit, not just the final files: a leak added and then
     removed in the same push would otherwise stay public in history."""
     problems = []
-    gitfiles.require_commits(revision_range.split())
+    # Annotated tags being pushed: check each tag object whole (message, tag
+    # name, tagger, signature) and every tagger email. Labels use the short
+    # id only, since a tag name could match a private pattern.
+    for revision in gitfiles.require_commits(revision_range.split()):
+        if revision.startswith("^"):
+            continue  # already on the remote
+        for tag in gitfiles.tag_chain(revision):
+            label = f"tag {tag.sha[:10]}"
+            check_text(label, without_signature(tag.raw), patterns, problems)
+            if not tag.taggers:
+                problems.append(f"{label}: has no tagger")
+            for email in tag.taggers:
+                if email is None:
+                    problems.append(f"{label}: tagger has no email")
+                else:
+                    check_email(f"{label} tagger", email, problems)
     log = git("log", "--format=%H%x00%ae%x00%ce", revision_range).decode("utf-8", errors="replace")
     commits = [line.split("\0") for line in log.splitlines() if line]
     bodies = commit_bodies([sha for sha, _, _ in commits])

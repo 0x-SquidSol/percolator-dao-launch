@@ -48,6 +48,10 @@ jobs:
           GUARD_PATTERNS: ${{ secrets.GUARD_PATTERNS }}
           PUSHED_REF: ${{ github.ref }}
         run: |
+          # Shows whether checkout kept the tag object (an annotated tag) or
+          # only a ref to its commit; the tag's own text is checked only in
+          # the first case.
+          echo "pushed tag is a $(git cat-file -t "$PUSHED_REF")"
           python3 scripts/guards/guard.py commits "$PUSHED_REF"
           python3 scripts/guards/provenance.py commits "$PUSHED_REF"
 
