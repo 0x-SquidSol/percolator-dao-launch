@@ -157,6 +157,16 @@ class CommitHeaderTest(unittest.TestCase):
                   " -----END PGP SIGNATURE-----\n")
         self.assert_blocked(self.commit(extra=gpgsig), "private pattern")
 
+    def test_second_encoding_line_refused(self):
+        # git uses the first encoding line; a second could make the guard
+        # read the message differently from git (here UTF-7 hides the text).
+        message = b"+AFoAWgBUAEUAUwBUAC0ANAAy-"
+        for order in (b"encoding utf-7\nencoding UTF-8\n", b"encoding UTF-8\nencoding utf-7\n"):
+            with self.subTest(order=order):
+                lines = (f"author Test <{GOOD}> 0 +0000\ncommitter Test <{GOOD}> 0 +0000\n"
+                         .encode() + order)
+                self.assert_refused(self.raw_commit(lines, message), "more than one encoding")
+
     def test_non_text_codec_refused_cleanly(self):
         for codec in ("rot13", "base64", "hex"):
             lines = (f"author Test <{GOOD}> 0 +0000\ncommitter Test <{GOOD}> 0 +0000\n"

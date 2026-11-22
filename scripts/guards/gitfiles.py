@@ -251,7 +251,7 @@ def parse_commit(raw) -> Commit:
       - each author/committer name and email (exactly one of each; git log
         only shows the first, so a second could hide an address);
       - each embedded tag (mergetag);
-      - the message, and any declared text encoding.
+      - the message, and its declared text encoding (at most one).
     Refuses (exits) on anything that doesn't have the expected shape."""
     head, separator, message = raw.partition(b"\n\n")
     if not separator:
@@ -273,6 +273,9 @@ def parse_commit(raw) -> Commit:
             mergetags.append(value + b"\n")
             continue
         if key == b"encoding":
+            # git reads the first; refuse a second rather than pick one.
+            if encoding is not None:
+                sys.exit("guard: refusing, a commit has more than one encoding header")
             encoding = value.decode("ascii", errors="replace")
         text.append(key + b" " + value)
     roles = sorted(role for role, _, _ in idents)
