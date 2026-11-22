@@ -15,13 +15,21 @@ working tree, so a symlink is checked as the link text git stores.
 Fail closed: submodules (their content is in another repository), unmerged
 entries and any unknown mode or status are returned as refusals, never
 skipped, and any git error stops the guard.
+
+Git stand-ins (`git replace`) change what git shows but not what a push
+sends, so they are switched off for every git process the guards start.
 """
+import os
 import re
 import subprocess
 import sys
 from typing import List, NamedTuple, Optional, Tuple
 
 import textscan
+
+# Set at import, before any git runs: guard.py and provenance.py import this
+# module, so all their git processes (including cat-file --batch) inherit it.
+os.environ["GIT_NO_REPLACE_OBJECTS"] = "1"
 
 CHECKABLE_MODES = {"100644", "100755", "120000"}  # file, executable, symlink
 CHECKABLE_STATUSES = set("ACMRT")
@@ -128,7 +136,14 @@ def require_commits(rev_args):
     """Refuses unless every revision named in rev_args is a commit, or a tag
     (or chain of tags) of one. git log and rev-list list nothing for a blob
     or tree, so without this a pushed ref pointing at one would look clean.
-    git itself parses the arguments (ranges, --not, --remotes, ...)."""
+    git itself parses the arguments (ranges, --not, --remotes, ...).
+    Also refuses while a graft file exists: grafts rewrite parent links, so
+    the guard and a push could walk different commits. (Grafts are
+    deprecated; --git-path follows GIT_GRAFT_FILE.)"""
+    # fsdecode, not a lossy decode: the path must stay exactly as git gave it.
+    grafts = os.fsdecode(_git("rev-parse", "--git-path", "info/grafts").rstrip(b"\r\n"))
+    if os.path.lexists(grafts):
+        sys.exit("guard: refusing, a git graft file exists (grafts are deprecated; remove it)")
     resolved = _git("rev-parse", "--revs-only", *rev_args).decode("ascii").split()
     if not any(not sha.startswith("^") for sha in resolved):
         # Nothing being pushed was named (e.g. an unknown name git dropped).

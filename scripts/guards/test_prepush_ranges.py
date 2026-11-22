@@ -31,7 +31,8 @@ class PrePushRangeTest(unittest.TestCase):
         self.recorded = os.path.join(self.root, "gitleaks-args.txt")
         stub = os.path.join(bindir, "gitleaks")
         with open(stub, "w", newline="\n") as handle:
-            handle.write(f'#!/bin/sh\nfor a in "$@"; do echo "$a" >> "{self.recorded}"; done\nexit 0\n')
+            handle.write(f'#!/bin/sh\nfor a in "$@"; do echo "$a" >> "{self.recorded}"; done\n'
+                         f'echo "no-replace=$GIT_NO_REPLACE_OBJECTS" >> "{self.recorded}"\nexit 0\n')
         os.chmod(stub, 0o755)
         self.env["PATH"] = bindir + os.pathsep + self.env["PATH"]
 
@@ -97,6 +98,26 @@ class PrePushRangeTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(clean, self.scanned_by_gitleaks())
         del commit
+
+    def recorded_lines(self):
+        with open(self.recorded) as handle:
+            return handle.read().split("\n")
+
+    def test_gitleaks_reads_real_objects_on_push(self):
+        # gitleaks reads through git, so the hook must switch off stand-ins.
+        result = self.run_hook(self.git("rev-parse", "HEAD"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("no-replace=1", self.recorded_lines())
+
+    def test_gitleaks_reads_real_objects_on_commit(self):
+        if os.path.exists(self.recorded):
+            os.remove(self.recorded)
+        result = subprocess.run(
+            ["sh", os.path.join(REPO, ".githooks", "pre-commit")], cwd=self.work,
+            capture_output=True, text=True, env=self.env,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("no-replace=1", self.recorded_lines())
 
     def test_clean_new_branch_allowed(self):
         head = self.git("rev-parse", "HEAD")

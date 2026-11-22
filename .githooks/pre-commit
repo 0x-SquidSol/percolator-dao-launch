@@ -1,6 +1,9 @@
 #!/bin/sh
 # Leak guard, provenance guard and secret scan for staged changes. See scripts/README.md.
 . "$(dirname "$0")/find-python.sh"
+# Read the real objects a commit or push uses, not `git replace` stand-ins
+# (this also reaches gitleaks, which reads through git).
+export GIT_NO_REPLACE_OBJECTS=1
 "$PY" scripts/guards/guard.py staged || exit 1
 "$PY" scripts/guards/provenance.py staged || exit 1
 

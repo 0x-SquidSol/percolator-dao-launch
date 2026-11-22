@@ -5,6 +5,9 @@
 # commits made by merges and rebases, which skip the pre-commit hook.
 # See scripts/README.md.
 . "$(dirname "$0")/find-python.sh"
+# Read the real objects a commit or push uses, not `git replace` stand-ins
+# (this also reaches gitleaks, which reads through git).
+export GIT_NO_REPLACE_OBJECTS=1
 
 if ! command -v gitleaks >/dev/null 2>&1; then
   echo "secret scan: gitleaks is required for pushes (see scripts/README.md)" >&2
