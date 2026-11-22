@@ -1,7 +1,7 @@
 //! Claim-list (merkle) verification, exactly as specified in
-//! `docs/spec/merkle.md`. Programs should call [`verify_claim`], which
-//! recomputes the leaf from the claim's own fields; never accept a leaf hash
-//! from the caller.
+//! `docs/spec/merkle.md`. Programs call [`verify_claim`], which recomputes
+//! the leaf from the claim's own fields (never accept a leaf hash from the
+//! caller) and returns an error to propagate with `?` when the check fails.
 
 /// Prefix byte for leaf hashes.
 pub const LEAF_PREFIX: u8 = 0x00;
@@ -42,6 +42,7 @@ const WEEKLY_DROP_LEN: u8 = len_byte(WEEKLY_DROP);
 
 impl Domain {
     /// The ASCII domain label hashed into every leaf.
+    #[must_use]
     pub const fn tag(self) -> &'static [u8] {
         match self {
             Domain::Guaranteed => GUARANTEED,
@@ -60,6 +61,7 @@ impl Domain {
 }
 
 /// The leaf hash of one entry.
+#[must_use = "this only computes the leaf hash; it checks nothing"]
 pub fn leaf(
     domain: Domain,
     distribution: &[u8; 32],
@@ -91,6 +93,7 @@ fn leaf_hash(
 }
 
 /// Combines two hashes. Order-independent: the smaller hash goes first.
+#[must_use = "this only computes the combined hash; it checks nothing"]
 pub fn node(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
     let (low, high) = if a <= b { (a, b) } else { (b, a) };
     node_hash(low, high)
@@ -127,10 +130,20 @@ fn node_hash(low: &[u8; 32], high: &[u8; 32]) -> [u8; 32] {
     core::array::from_fn(|i| low[i] ^ high[i].rotate_left(1) ^ NODE_PREFIX)
 }
 
-/// Whether `proof` leads from `leaf` to `root`. Rejects proofs longer than
-/// [`MAX_PROOF_LEN`]. Programs should use [`verify_claim`] instead, so the
-/// leaf is always recomputed from the claim's fields.
-pub fn verify_proof(proof: &[[u8; 32]], root: &[u8; 32], leaf: [u8; 32]) -> bool {
+/// Why a claim was refused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClaimError {
+    /// The proof is longer than [`MAX_PROOF_LEN`].
+    ProofTooLong,
+    /// The entry is not on the list with this root.
+    NotOnList,
+}
+
+/// Whether `proof` leads from `leaf` to `root`, for this module's tests and
+/// proofs. Private: programs must use [`verify_claim`], so the leaf is always
+/// recomputed from the claim's fields, never taken from the caller.
+#[must_use = "the proof is valid only if this returns true"]
+fn verify_proof(proof: &[[u8; 32]], root: &[u8; 32], leaf: [u8; 32]) -> bool {
     if proof.len() > MAX_PROOF_LEN {
         return false;
     }
@@ -141,9 +154,33 @@ pub fn verify_proof(proof: &[[u8; 32]], root: &[u8; 32], leaf: [u8; 32]) -> bool
     hash == *root
 }
 
-/// Whether the entry (`wallet` is owed `amount` for release `index`) is on
-/// the list with `root`. `distribution` must come from the account being
+/// Checks that the entry (`wallet` is owed `amount` for release `index`) is
+/// on the list with `root`. `distribution` must come from the account being
 /// claimed against and `wallet` from the signer.
+///
+/// Returns an error rather than a bool, so the natural call is
+/// `verify_claim(..)?`, which stops the instruction when the check fails and
+/// leaves no `if` to get the wrong way round. Ignoring the result fails to
+/// build (and `let _ = ...` fails clippy). One escape remains on Rust 1.78:
+/// `verify_claim(..).ok()` stored in a variable that is never read. Reject
+/// it in review.
+///
+/// ```compile_fail
+/// #![deny(unused_must_use)]
+/// use dao_common::merkle::{verify_claim, Domain};
+/// verify_claim(Domain::WeeklyDrop, &[1; 32], &[2; 32], 1_000, 0, &[], &[3; 32]);
+/// ```
+///
+/// ```
+/// #![deny(unused_must_use)]
+/// use dao_common::merkle::{verify_claim, ClaimError, Domain};
+/// fn claim() -> Result<(), ClaimError> {
+///     verify_claim(Domain::WeeklyDrop, &[1; 32], &[2; 32], 1_000, 0, &[], &[3; 32])?;
+///     // ...pay the claim
+///     Ok(())
+/// }
+/// assert_eq!(claim(), Err(ClaimError::NotOnList));
+/// ```
 pub fn verify_claim(
     domain: Domain,
     distribution: &[u8; 32],
@@ -152,12 +189,19 @@ pub fn verify_claim(
     index: u32,
     proof: &[[u8; 32]],
     root: &[u8; 32],
-) -> bool {
-    verify_proof(
+) -> Result<(), ClaimError> {
+    if proof.len() > MAX_PROOF_LEN {
+        return Err(ClaimError::ProofTooLong);
+    }
+    if verify_proof(
         proof,
         root,
         leaf(domain, distribution, wallet, amount, index),
-    )
+    ) {
+        Ok(())
+    } else {
+        Err(ClaimError::NotOnList)
+    }
 }
 
 #[cfg(test)]
@@ -244,8 +288,9 @@ mod tests {
                 let expected = hex32(entry["leaf"].as_str().expect("leaf"));
                 assert_eq!(leaf(d, &distribution, &wallet, amount, index), expected);
                 let p = proof(&entry["proof"]);
-                assert!(
+                assert_eq!(
                     verify_claim(d, &distribution, &wallet, amount, index, &p, &root),
+                    Ok(()),
                     "{}",
                     case["name"]
                 );
@@ -308,60 +353,78 @@ mod tests {
         let b = leaf(Domain::LegacyTranche, &dist, &[2u8; 32], 200, 0);
         let root = node(&a, &b);
         let p = [b];
-        assert!(verify_claim(
-            Domain::LegacyTranche,
-            &dist,
-            &[1u8; 32],
-            100,
-            0,
-            &p,
-            &root
-        ));
-        assert!(!verify_claim(
-            Domain::LegacyTranche,
-            &dist,
-            &[3u8; 32],
-            100,
-            0,
-            &p,
-            &root
-        ));
-        assert!(!verify_claim(
-            Domain::LegacyTranche,
-            &dist,
-            &[1u8; 32],
-            101,
-            0,
-            &p,
-            &root
-        ));
-        assert!(!verify_claim(
-            Domain::LegacyTranche,
-            &dist,
-            &[1u8; 32],
-            100,
-            1,
-            &p,
-            &root
-        ));
-        assert!(!verify_claim(
-            Domain::WeeklyDrop,
-            &dist,
-            &[1u8; 32],
-            100,
-            0,
-            &p,
-            &root
-        ));
-        assert!(!verify_claim(
-            Domain::LegacyTranche,
-            &[8u8; 32],
-            &[1u8; 32],
-            100,
-            0,
-            &p,
-            &root
-        ));
+        let check = |domain, dist: &[u8; 32], wallet: &[u8; 32], amount, index| {
+            verify_claim(domain, dist, wallet, amount, index, &p, &root)
+        };
+        assert_eq!(
+            check(Domain::LegacyTranche, &dist, &[1u8; 32], 100, 0),
+            Ok(())
+        );
+        let refused = Err(ClaimError::NotOnList);
+        assert_eq!(
+            check(Domain::LegacyTranche, &dist, &[3u8; 32], 100, 0),
+            refused
+        );
+        assert_eq!(
+            check(Domain::LegacyTranche, &dist, &[1u8; 32], 101, 0),
+            refused
+        );
+        assert_eq!(
+            check(Domain::LegacyTranche, &dist, &[1u8; 32], 100, 1),
+            refused
+        );
+        assert_eq!(
+            check(Domain::WeeklyDrop, &dist, &[1u8; 32], 100, 0),
+            refused
+        );
+        assert_eq!(
+            check(Domain::LegacyTranche, &[8u8; 32], &[1u8; 32], 100, 0),
+            refused
+        );
+    }
+
+    #[test]
+    fn proof_of_exactly_the_limit_is_accepted() {
+        let l = leaf(Domain::WeeklyDrop, &[3u8; 32], &[4u8; 32], 5, 0);
+        let full = vec![l; MAX_PROOF_LEN];
+        let mut root = l;
+        for sibling in &full {
+            root = node(&root, sibling);
+        }
+        assert_eq!(
+            verify_claim(
+                Domain::WeeklyDrop,
+                &[3u8; 32],
+                &[4u8; 32],
+                5,
+                0,
+                &full,
+                &root
+            ),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn overlong_proof_is_refused_as_too_long() {
+        let l = leaf(Domain::WeeklyDrop, &[3u8; 32], &[4u8; 32], 5, 0);
+        let long = vec![l; MAX_PROOF_LEN + 1];
+        let mut root = l;
+        for sibling in &long {
+            root = node(&root, sibling);
+        }
+        assert_eq!(
+            verify_claim(
+                Domain::WeeklyDrop,
+                &[3u8; 32],
+                &[4u8; 32],
+                5,
+                0,
+                &long,
+                &root
+            ),
+            Err(ClaimError::ProofTooLong)
+        );
     }
 }
 

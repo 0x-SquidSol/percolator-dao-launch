@@ -15,11 +15,16 @@ resolver = "2"
 # deny, not forbid: an Anchor program entry point may need a narrow, reviewed
 # allow. Crates with no such need also forbid it in their own source.
 unsafe_code = "deny"
+# A result that must be used (Result, or #[must_use] values like the claim
+# verifier's) can't be silently dropped.
+unused_must_use = "deny"
 
 [workspace.lints.clippy]
 # Plain + - * / % and friends can overflow, wrap or panic. Math must use
 # checked_* (or saturating_* where that is the intended behavior) instead.
 arithmetic_side_effects = "deny"
+# `let _ = verify_claim(..)` would otherwise silence unused_must_use.
+let_underscore_must_use = "deny"
 # `as` casts silently truncate, wrap or drop the sign. Use try_from/try_into
 # (which fail loudly) instead.
 cast_possible_truncation = "deny"

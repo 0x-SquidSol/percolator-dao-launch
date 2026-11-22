@@ -164,15 +164,18 @@ fn check_typescript_lists(path: &str) -> usize {
                 &ts_proof,
                 "proof differs"
             );
-            assert!(verify_claim(
-                domain,
-                &distribution,
-                wallet,
-                *amount,
-                *index,
-                &ts_proof,
-                &root
-            ));
+            assert_eq!(
+                verify_claim(
+                    domain,
+                    &distribution,
+                    wallet,
+                    *amount,
+                    *index,
+                    &ts_proof,
+                    &root
+                ),
+                Ok(())
+            );
             checked = checked.checked_add(1).expect("count");
         }
     }
