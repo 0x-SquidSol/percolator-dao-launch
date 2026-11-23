@@ -76,6 +76,68 @@ class LogCheckTest(unittest.TestCase):
         self.assertIn("reported a problem", self.check("\x1b[90m6:17PM\x1b[0m \x1b[31mERR\x1b[0m x"))
 
 
+class CleanRefusalTest(unittest.TestCase):
+    """Odd input must end in a clean refusal, never a traceback."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def outcome(self, call):
+        try:
+            call()
+            return "passed"
+        except SystemExit as stop:
+            return str(stop)
+
+    def test_undecodable_patterns_file(self):
+        os.makedirs(os.path.join(self.root, "private"))
+        with open(os.path.join(self.root, "private", "guard-patterns.txt"), "wb") as handle:
+            handle.write(b"\xff\xfe\x00not text")
+        cwd, saved = os.getcwd(), os.environ.pop("GUARD_PATTERNS", None)
+        os.chdir(self.root)
+        try:
+            # Paths are then hidden, as when no patterns are available.
+            self.assertIsNone(secretscan.private_patterns())
+        finally:
+            os.chdir(cwd)
+            if saved is not None:
+                os.environ["GUARD_PATTERNS"] = saved
+
+    def test_pattern_too_large_to_compile(self):
+        saved = os.environ.get("GUARD_PATTERNS")
+        os.environ["GUARD_PATTERNS"] = "a{99999999999}\n"
+        try:
+            self.assertIsNone(secretscan.private_patterns())
+        finally:
+            if saved is None:
+                del os.environ["GUARD_PATTERNS"]
+            else:
+                os.environ["GUARD_PATTERNS"] = saved
+
+    @unittest.skipUnless(os.name == "nt", "only Windows has drives")
+    def test_skipped_path_on_another_drive(self):
+        drive = "D:" if not self.root.upper().startswith("D:") else "E:"
+        line = ("6:46PM DBG skipping file: global allowlist path="
+                + json.dumps(drive + "\\x\\y")).encode()
+        self.assertIn("refusing", self.outcome(lambda: secretscan.check_log(line, self.root)))
+
+    def test_skipped_path_with_nul(self):
+        line = b'6:46PM DBG skipping file: global allowlist path="/x\\u0000y"'
+        self.assertIn("refusing", self.outcome(lambda: secretscan.check_log(line, self.root)))
+
+    def test_unusable_line_numbers(self):
+        content = os.path.join(self.root, "a" * 40)
+        for line in (float("inf"), float("nan"), 1.5, True, "3"):
+            with self.subTest(line=line):
+                finding = {"File": content, "RuleID": "r", "StartLine": line}
+                self.assertIn("unreadable finding", self.outcome(lambda: secretscan.report_lines(
+                    [finding], {content: [("x", "p")]}, self.root,
+                    os.path.join(self.root, "canary"))))
+
+
 class GitleaksPresentTest(unittest.TestCase):
     def test_gitleaks_installed_where_required(self):
         if REQUIRED:

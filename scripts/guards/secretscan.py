@@ -75,13 +75,16 @@ def private_patterns():
     secret scan job, or can't be read."""
     raw = os.environ.get("GUARD_PATTERNS")
     if raw is None and os.path.isfile(PATTERNS_FILE):
-        with open(PATTERNS_FILE, encoding="utf-8") as handle:
-            raw = handle.read()
+        try:
+            with open(PATTERNS_FILE, encoding="utf-8") as handle:
+                raw = handle.read()
+        except (OSError, UnicodeDecodeError):
+            return None
     lines = [line.strip() for line in (raw or "").splitlines()]
     lines = [line for line in lines if line and not line.startswith("#")]
     try:
         return [re.compile(line, re.IGNORECASE) for line in lines] or None
-    except re.error:
+    except (re.error, OverflowError, RecursionError):  # e.g. a{99999999999}
         return None
 
 
@@ -319,7 +322,10 @@ def check_log(log, root):
             name = None
         if name is None:
             refuse("gitleaks skipped a file it did not name")
-        name = os.path.normcase(os.path.normpath(os.path.join(root, os.path.relpath(name, root))))
+        try:
+            name = os.path.normcase(os.path.normpath(os.path.join(root, os.path.relpath(name, root))))
+        except ValueError:  # a path on another drive (Windows)
+            refuse("gitleaks skipped a file instead of scanning it")
         if not name.startswith(markers):
             refuse("gitleaks skipped a file instead of scanning it")
 
@@ -335,7 +341,9 @@ def report_lines(findings, where, root, canary):
     for finding in findings:
         try:
             found = key(os.path.join(root, os.path.relpath(finding["File"], root)))
-            rule, line = finding["RuleID"], int(finding["StartLine"])
+            rule, line = finding["RuleID"], finding["StartLine"]
+            if type(line) is not int:  # not 1.5, True, "3" or Infinity
+                raise TypeError
         except (KeyError, TypeError, ValueError):
             refuse("gitleaks gave an unreadable finding")
         if found == key(canary):
