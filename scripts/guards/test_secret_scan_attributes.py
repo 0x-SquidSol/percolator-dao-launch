@@ -633,21 +633,54 @@ class SecretScanAttributesTest(unittest.TestCase):
                                 cwd=self.dir, capture_output=True, text=True, env=env)
         self.assert_refused(result, "gitleaks is required")
 
-    def test_gitleaks_on_relative_path_from_subfolder(self):
-        # A relative PATH entry (or, on Windows, the current folder) makes the
-        # lookup relative; the scan then moves to the top folder.
+    def scan_with_tools_on_path(self, entry, cwd):
+        # A copy of gitleaks in <repo>/sub/tools, found only through `entry`.
         self.commit_secret()
         tools = os.path.join(self.dir, "sub", "tools")
         os.makedirs(tools)
-        shutil.copy(shutil.which("gitleaks"), tools)
+        shutil.copy(GITLEAKS, tools)
         names = ("gitleaks", "gitleaks.exe")
         folders = [folder for folder in self.env["PATH"].split(os.pathsep)
                    if not any(os.path.exists(os.path.join(folder, name)) for name in names)]
-        env = dict(self.env, PATH=os.pathsep.join(["tools", *folders]))
-        result = subprocess.run([sys.executable, os.path.join("..", "scripts", "guards", "secretscan.py"),
-                                 "commits", "--trusted", self.base, "--change", "HEAD", "--all"],
-                                cwd=os.path.join(self.dir, "sub"), capture_output=True, text=True, env=env)
-        self.assert_found(result)
+        env = dict(self.env, PATH=os.pathsep.join([entry, *folders]))
+        script = os.path.relpath(os.path.join(self.dir, "scripts", "guards", "secretscan.py"), cwd)
+        return subprocess.run([sys.executable, script, "commits", "--trusted", self.base,
+                               "--change", "HEAD", "--all"],
+                              cwd=cwd, capture_output=True, text=True, env=env)
+
+    def test_relative_path_entry_ignored(self):
+        # From a subfolder, as from the top folder in hooks, a relative PATH
+        # entry points into the repository.
+        result = self.scan_with_tools_on_path("tools", os.path.join(self.dir, "sub"))
+        self.assert_refused(result, "gitleaks is required")
+
+    def test_gitleaks_inside_repo_refused(self):
+        tools = os.path.join(self.dir, "sub", "tools")
+        self.assert_refused(self.scan_with_tools_on_path(tools, self.dir),
+                            "must not come from inside the repository")
+
+    @unittest.skipUnless(os.name == "nt", "only Windows searches the current folder")
+    def test_gitleaks_planted_in_repo_not_run(self):
+        # Windows looks in the current folder before PATH, for .exe, .cmd and
+        # the like. A stand-in that hides every file but the canary and then
+        # runs the real gitleaks would report a clean scan.
+        self.write("fake.py",
+                   "import os, subprocess, sys\n"
+                   "for top, _, names in os.walk(sys.argv[-1]):\n"
+                   "    for name in names:\n"
+                   "        if name != 'canary':\n"
+                   "            os.remove(os.path.join(top, name))\n"
+                   f"sys.exit(subprocess.run([{os.path.abspath(GITLEAKS)!r}, *sys.argv[1:]]).returncode)\n")
+        self.write("gitleaks.cmd", f'@"{sys.executable}" "%~dp0fake.py" %*\r\n')
+        self.commit_secret()
+        env = {k: v for k, v in self.env.items() if k.lower() != "nodefaultcurrentdirectoryinexepath"}
+        result = subprocess.run([sys.executable, "scripts/guards/secretscan.py", "commits",
+                                 "--trusted", self.base, "--change", "HEAD", "--all"],
+                                cwd=self.dir, capture_output=True, text=True, env=env)
+        output = result.stdout + result.stderr
+        self.assertNotEqual(result.returncode, 0, output)
+        self.assertNotIn("Traceback", output)
+        self.assertIn("possible secrets found", output)  # the real gitleaks ran
 
     def test_gitleaks_that_cannot_start_refused(self):
         cwd = os.getcwd()

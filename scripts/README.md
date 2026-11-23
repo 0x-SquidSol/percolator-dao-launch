@@ -131,7 +131,10 @@ merges and rebases, which skip the pre-commit hook, are scanned too), and
 Install gitleaks **v8.30.1** once per machine, from the
 [release page](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1),
 check the download against the release's `checksums.txt`, and put the binary
-on your `PATH`. Commits and pushes are refused until it is installed.
+on your `PATH`. Commits and pushes are refused until it is installed. Only
+absolute `PATH` folders are searched, never the current folder, and a
+gitleaks inside the repository is refused, so files in the repository can't
+choose their own scanner.
 
 Transaction signatures look the same as Solana secret keys. If a real
 signature must be quoted in a doc or test, add a `gitleaks:allow` comment on

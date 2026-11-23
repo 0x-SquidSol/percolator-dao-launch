@@ -360,14 +360,51 @@ def report_lines(findings, where, root, canary):
     return problems
 
 
+def in_current_folder(path):
+    """Whether `path`, links resolved, is the current folder or inside it."""
+    top = os.stat(".")
+    top_path = os.path.normcase(os.path.realpath("."))
+    place = os.path.realpath(path)
+    while True:
+        here = os.stat(place)
+        if top.st_ino and here.st_ino:
+            same = os.path.samestat(here, top)
+        else:  # a file system without file IDs: compare paths
+            same = os.path.normcase(place) == top_path
+        if same:
+            return True
+        parent = os.path.dirname(place)
+        if parent == place:
+            return False
+        place = parent
+
+
+def find_gitleaks():
+    """gitleaks from an absolute PATH folder. The repository being scanned
+    must never choose its own scanner: Windows also searches the current
+    folder (and finds .cmd, .bat and the like), and relative PATH folders
+    point into the repository when hooks run."""
+    os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"  # Windows, Python 3.12+
+    folders = os.environ.get("PATH", "").split(os.pathsep)
+    search = os.pathsep.join(folder for folder in folders if folder and os.path.isabs(folder))
+    gitleaks = shutil.which("gitleaks", path=search)
+    if gitleaks is None:
+        refuse("gitleaks is required (see scripts/README.md)")
+    return os.path.abspath(gitleaks)
+
+
 def main(argv):
     if len(argv) < 2 or argv[1] not in ("staged", "commits"):
         sys.exit(__doc__)
-    gitleaks = shutil.which("gitleaks")
-    if gitleaks is None:
-        refuse("gitleaks is required (see scripts/README.md)")
-    gitleaks = os.path.abspath(gitleaks)  # which() may give a relative path
+    gitleaks = find_gitleaks()  # before git is used
     os.chdir(gitfiles._git("rev-parse", "--show-toplevel").decode().strip())
+    # Older Pythons on Windows search the current folder whatever the path.
+    try:
+        planted = any(in_current_folder(place) for place in (os.path.dirname(gitleaks), gitleaks))
+    except OSError:
+        refuse("could not check where gitleaks is installed")
+    if planted:
+        refuse("gitleaks must not come from inside the repository")
     pairs, configs = listing(argv[1], argv[2:])
     problems = scan(pairs, configs, gitleaks)
     if problems:
