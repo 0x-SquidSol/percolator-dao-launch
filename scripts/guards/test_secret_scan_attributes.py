@@ -623,7 +623,12 @@ class SecretScanAttributesTest(unittest.TestCase):
                                      "commits", "no-such-ref"), "refusing")
 
     def test_missing_gitleaks_refused(self):
-        env = dict(self.env, PATH=os.path.dirname(shutil.which("git")))
+        # PATH without any folder holding gitleaks (git may share one, as
+        # with Homebrew; the scan checks for gitleaks before using git).
+        names = ("gitleaks", "gitleaks.exe")
+        folders = [folder for folder in self.env["PATH"].split(os.pathsep)
+                   if not any(os.path.exists(os.path.join(folder, name)) for name in names)]
+        env = dict(self.env, PATH=os.pathsep.join(folders))
         result = subprocess.run([sys.executable, "scripts/guards/secretscan.py", "commits", "--all"],
                                 cwd=self.dir, capture_output=True, text=True, env=env)
         self.assert_refused(result, "gitleaks is required")

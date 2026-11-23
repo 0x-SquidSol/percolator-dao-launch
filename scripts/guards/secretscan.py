@@ -177,8 +177,8 @@ def listing(mode, args):
         entries, refusals = gitfiles.staged()
         pairs = [("staged", entry) for entry in entries]
         reviewed = ("HEAD", "@{upstream}", "refs/remotes/origin/main")
-        trusted = [rev for rev in map(resolve, reviewed) if rev]
-        configs = config_blobs(trusted + [""])
+        reviewed_revs = [rev for rev in map(resolve, reviewed) if rev]
+        configs = config_blobs(reviewed_revs + [""])  # "" is the index
     else:
         options = {}
         while args[:1] in (["--trusted"], ["--change"]):
@@ -213,12 +213,9 @@ def listing(mode, args):
     return pairs, sorted(configs)
 
 
-def scan(pairs, configs):
-    """Problems found by gitleaks under any of the settings, as printable
-    lines."""
-    gitleaks = shutil.which("gitleaks")
-    if gitleaks is None:
-        refuse("gitleaks is required (see scripts/README.md)")
+def scan(pairs, configs, gitleaks):
+    """Problems found by gitleaks (the binary at `gitleaks`) under any of the
+    settings, as printable lines."""
     where = {}  # file in the scan folder -> [(label, path)]
     with tempfile.TemporaryDirectory() as tmp:
         root = os.path.join(tmp, "scan")
@@ -363,11 +360,12 @@ def report_lines(findings, where, root, canary):
 def main(argv):
     if len(argv) < 2 or argv[1] not in ("staged", "commits"):
         sys.exit(__doc__)
-    os.chdir(gitfiles._git("rev-parse", "--show-toplevel").decode().strip())
-    if shutil.which("gitleaks") is None:
+    gitleaks = shutil.which("gitleaks")
+    if gitleaks is None:
         refuse("gitleaks is required (see scripts/README.md)")
+    os.chdir(gitfiles._git("rev-parse", "--show-toplevel").decode().strip())
     pairs, configs = listing(argv[1], argv[2:])
-    problems = scan(pairs, configs)
+    problems = scan(pairs, configs, gitleaks)
     if problems:
         print("secret scan: refusing, possible secrets found (redacted):", file=sys.stderr)
         for problem in sorted(set(problems)):
