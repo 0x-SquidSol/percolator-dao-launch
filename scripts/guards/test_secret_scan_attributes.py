@@ -633,6 +633,33 @@ class SecretScanAttributesTest(unittest.TestCase):
                                 cwd=self.dir, capture_output=True, text=True, env=env)
         self.assert_refused(result, "gitleaks is required")
 
+    def test_gitleaks_on_relative_path_from_subfolder(self):
+        # A relative PATH entry (or, on Windows, the current folder) makes the
+        # lookup relative; the scan then moves to the top folder.
+        self.commit_secret()
+        tools = os.path.join(self.dir, "sub", "tools")
+        os.makedirs(tools)
+        shutil.copy(shutil.which("gitleaks"), tools)
+        names = ("gitleaks", "gitleaks.exe")
+        folders = [folder for folder in self.env["PATH"].split(os.pathsep)
+                   if not any(os.path.exists(os.path.join(folder, name)) for name in names)]
+        env = dict(self.env, PATH=os.pathsep.join(["tools", *folders]))
+        result = subprocess.run([sys.executable, os.path.join("..", "scripts", "guards", "secretscan.py"),
+                                 "commits", "--trusted", self.base, "--change", "HEAD", "--all"],
+                                cwd=os.path.join(self.dir, "sub"), capture_output=True, text=True, env=env)
+        self.assert_found(result)
+
+    def test_gitleaks_that_cannot_start_refused(self):
+        cwd = os.getcwd()
+        os.chdir(self.dir)
+        try:
+            configs = secretscan.config_blobs([self.base])
+            with self.assertRaises(SystemExit) as stop:
+                secretscan.scan([], configs, os.path.join(self.dir, "no-such-gitleaks"))
+        finally:
+            os.chdir(cwd)
+        self.assertIn("could not run gitleaks", str(stop.exception))
+
     def test_report_hides_private_paths(self):
         self.commit_secret(name="ZZTEST-42/notes.txt")
         output = self.ci_scan().stderr

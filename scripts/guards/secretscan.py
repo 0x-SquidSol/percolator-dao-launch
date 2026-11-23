@@ -259,13 +259,16 @@ def scan(pairs, configs, gitleaks):
         problems = []
         for number, config in enumerate(settings):
             report = os.path.join(tmp, f"report-{number}.json")
-            result = subprocess.run(
-                [gitleaks, "dir", "--config", config, "--no-banner", "--redact",
-                 "--log-level", "debug", "--gitleaks-ignore-path", no_ignores,
-                 "--exit-code", str(LEAKS_EXIT), "--report-format", "json",
-                 "--report-path", report, root],
-                capture_output=True,
-            )
+            try:
+                result = subprocess.run(
+                    [gitleaks, "dir", "--config", config, "--no-banner", "--redact",
+                     "--log-level", "debug", "--gitleaks-ignore-path", no_ignores,
+                     "--exit-code", str(LEAKS_EXIT), "--report-format", "json",
+                     "--report-path", report, root],
+                    capture_output=True,
+                )
+            except OSError:
+                refuse("could not run gitleaks")
             if result.returncode not in (0, LEAKS_EXIT):
                 refuse("gitleaks failed")
             check_log(result.stdout + result.stderr, root)
@@ -363,6 +366,7 @@ def main(argv):
     gitleaks = shutil.which("gitleaks")
     if gitleaks is None:
         refuse("gitleaks is required (see scripts/README.md)")
+    gitleaks = os.path.abspath(gitleaks)  # which() may give a relative path
     os.chdir(gitfiles._git("rev-parse", "--show-toplevel").decode().strip())
     pairs, configs = listing(argv[1], argv[2:])
     problems = scan(pairs, configs, gitleaks)
