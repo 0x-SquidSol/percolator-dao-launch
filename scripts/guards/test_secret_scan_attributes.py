@@ -98,6 +98,7 @@ class SecretScanAttributesTest(unittest.TestCase):
         self.git("add", "-A")
         self.git("commit", "-q", "--no-verify", "-m", "init")
         self.base = self.git("rev-parse", "HEAD")
+        self.git("update-ref", "refs/remotes/origin/main", self.base)  # reviewed main
 
     def tearDown(self):
         shutil.rmtree(self.dir, ignore_errors=True)
@@ -130,16 +131,19 @@ class SecretScanAttributesTest(unittest.TestCase):
     def pre_commit(self):
         return self.run_cmd("sh", os.path.join(REPO, ".githooks", "pre-commit"))
 
-    def pre_push(self, sha):
+    def pre_push(self, sha, remote_sha="0" * 40, remote_ref="refs/heads/x"):
         return self.run_cmd("sh", os.path.join(REPO, ".githooks", "pre-push"), "origin",
-                        "https://example.invalid/r.git",
-                        stdin=f"refs/heads/x {sha} refs/heads/x {'0' * 40}\n")
+                            "https://example.invalid/r.git",
+                            stdin=f"refs/heads/x {sha} {remote_ref} {remote_sha}\n")
 
-    def ci_scan(self):
-        # The command secrets.yml runs over the full history.
+    def ci_scan(self, trusted=None):
+        # The command secrets.yml runs over the full history (with the PR's
+        # base or main before the push as the trusted revision, if any).
         with open(os.path.join(REPO, ".github", "workflows", "secrets.yml")) as handle:
-            self.assertIn("python3 scripts/guards/secretscan.py commits --all", handle.read())
-        return self.run_cmd(sys.executable, "scripts/guards/secretscan.py", "commits", "--all")
+            self.assertIn("python3 scripts/guards/secretscan.py commits $trusted --change HEAD --all",
+                      handle.read())
+        return self.run_cmd(sys.executable, "scripts/guards/secretscan.py", "commits",
+                            "--trusted", trusted or self.base, "--change", "HEAD", "--all")
 
     def assert_found(self, result, rule="github-pat"):
         output = result.stdout + result.stderr
@@ -242,7 +246,9 @@ class SecretScanAttributesTest(unittest.TestCase):
         self.write("notes.txt", SECRET)
         self.git("add", "-A")
         self.git("commit", "-q", "--no-verify", "-m", "init")
-        self.assert_all_find(self.git("rev-parse", "HEAD"))
+        self.base = self.git("rev-parse", "HEAD")  # only its settings matter
+        self.git("update-ref", "refs/remotes/origin/main", self.base)
+        self.assert_all_find(self.base)
 
     def test_type_change_found(self):
         blob = self.git("hash-object", "-w", "--stdin", data=b"elsewhere")
@@ -340,7 +346,7 @@ class SecretScanAttributesTest(unittest.TestCase):
         sha = self.git("commit-tree", tree, "-p", self.base, "-m", "docs: odd names")
         self.git("update-ref", "refs/heads/odd", sha)
         self.assert_found(self.run_cmd(sys.executable, "scripts/guards/secretscan.py",
-                                       "commits", f"{self.base}..{sha}"))
+                                       "commits", "--trusted", self.base, f"{self.base}..{sha}"))
 
     def test_committed_gitleaksignore_not_used(self):
         self.commit_secret()
@@ -362,9 +368,192 @@ class SecretScanAttributesTest(unittest.TestCase):
         self.commit_secret()
         self.assert_refused(self.ci_scan(), "self-check failed")
 
+    def weaken_config(self):
+        # An allowlist that spares this one token but not the scan's canary.
+        with open(os.path.join(self.dir, ".gitleaks.toml"), "a") as handle:
+            handle.write("\n[[allowlists]]\nregexes = ['''" + TOKEN[:14] + "''']\n")
+
+    def test_commit_cannot_weaken_its_own_scan(self):
+        # The config a commit brings must not decide how that commit (or
+        # the history) is scanned.
+        self.weaken_config()
+        sha = self.commit_secret()
+        self.assert_found(self.ci_scan())
+        self.assert_found(self.pre_push(sha))
+
+    def test_staged_config_change_cannot_weaken_the_commit_scan(self):
+        self.weaken_config()
+        self.stage_secret()
+        self.assert_found(self.pre_commit())
+
+    def test_unstaged_config_change_cannot_weaken_the_scan(self):
+        self.stage_secret()
+        self.weaken_config()  # working tree only
+        self.assert_found(self.pre_commit())
+
+    def test_weakening_in_an_earlier_commit_cannot_help_a_later_one(self):
+        # Commit A loosens the settings, commit B adds the secret: the
+        # trusted revision's settings still apply to B.
+        self.weaken_config()
+        self.git("add", "-A")
+        self.git("commit", "-q", "--no-verify", "-m", "chore: settings")
+        sha = self.commit_secret()
+        self.assert_found(self.ci_scan(trusted=self.base))
+        self.assert_found(self.pre_push(sha, remote_sha=self.base))
+        self.assert_found(self.ci_scan())
+
+    def test_committed_weakening_cannot_help_the_next_staged_commit(self):
+        # The upstream branch's settings still apply at commit time.
+        self.git("remote", "add", "origin", "https://example.invalid/r.git")
+        self.git("update-ref", "refs/remotes/origin/main", self.base)
+        self.git("branch", "-q", "--set-upstream-to", "origin/main")
+        self.weaken_config()
+        self.git("add", "-A")
+        self.git("commit", "-q", "--no-verify", "-m", "chore: settings")
+        self.stage_secret()
+        self.assert_found(self.pre_commit())
+
+    def test_feature_branch_cannot_trust_its_own_earlier_push(self):
+        # Push 1 to a feature branch loosens the settings, push 2 adds the
+        # secret: that branch's earlier tip is not reviewed, main is.
+        self.git("update-ref", "refs/remotes/origin/main", self.base)
+        self.weaken_config()
+        self.git("add", "-A")
+        self.git("commit", "-q", "--no-verify", "-m", "chore: settings")
+        first_push = self.git("rev-parse", "HEAD")
+        sha = self.commit_secret()
+        self.assert_found(self.pre_push(sha, remote_sha=first_push, remote_ref="refs/heads/feat"))
+
+    def test_approved_loosening_applies_to_new_branches(self):
+        # Once a loosened setting is on main, a new branch is scanned with
+        # main's settings (not every older, stricter version in history).
+        self.weaken_config()
+        self.git("add", "-A")
+        self.git("commit", "-q", "--no-verify", "-m", "chore: reviewed settings")
+        self.git("update-ref", "refs/remotes/origin/main", self.git("rev-parse", "HEAD"))
+        sha = self.commit_secret()
+        result = self.pre_push(sha)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def ci_choice(self, **env):
+        """Runs secrets.yml's real scan step with a stand-in python3 that
+        records its arguments; returns them."""
+        with open(os.path.join(REPO, ".github", "workflows", "secrets.yml")) as handle:
+            lines = handle.read().splitlines()
+        start = next(i for i, line in enumerate(lines) if "name: Scan full history" in line)
+        run = next(i for i in range(start, len(lines)) if lines[i].strip() == "run: |")
+        body = []
+        for line in lines[run + 1:]:
+            if line.strip() and not line.startswith(" " * 10):
+                break
+            body.append(line[10:])
+        bindir = os.path.join(self.dir, "fakebin")
+        os.makedirs(bindir, exist_ok=True)
+        recorded = os.path.join(self.dir, "args.txt")
+        with open(os.path.join(bindir, "python3"), "w", newline="\n") as handle:
+            handle.write(f'#!/bin/sh\necho "$@" > "{recorded}"\n')
+        os.chmod(os.path.join(bindir, "python3"), 0o755)
+        script = os.path.join(self.dir, "step.sh")
+        with open(script, "w", newline="\n") as handle:
+            handle.write("\n".join(body) + "\n")
+        env = {**self.env, "PATH": bindir + os.pathsep + self.env["PATH"],
+               "RUNNER_TEMP": bindir, "DEFAULT_BRANCH": "main", "BASE_SHA": "",
+               "BASE_REF": "", "BEFORE_SHA": "", "GITHUB_EVENT_NAME": "push",
+               "GITHUB_REF": "refs/heads/main", **env}
+        subprocess.run(["sh", script], cwd=self.dir, env=env, check=True, capture_output=True)
+        with open(recorded) as handle:
+            return handle.read().split()
+
+    def test_ci_trusts_only_reviewed_history(self):
+        self.git("update-ref", "refs/remotes/origin/main", self.base)
+        tip = self.commit_secret()
+        cases = [
+            # A PR's base is trusted only when it is main.
+            (dict(GITHUB_EVENT_NAME="pull_request", BASE_REF="main", BASE_SHA=tip), tip),
+            (dict(GITHUB_EVENT_NAME="pull_request", BASE_REF="feat", BASE_SHA=tip), self.base),
+            # main before a push to main; current main for anything else.
+            (dict(GITHUB_REF="refs/heads/main", BEFORE_SHA=self.base), self.base),
+            (dict(GITHUB_REF="refs/heads/feat", BEFORE_SHA=tip), self.base),
+            (dict(GITHUB_REF="refs/tags/v1", BEFORE_SHA="0" * 40), self.base),
+            (dict(GITHUB_REF="refs/heads/main", BEFORE_SHA="0" * 40), None),
+            # A forced push whose old tip isn't in the clone: nothing trusted.
+            (dict(GITHUB_REF="refs/heads/main", BEFORE_SHA="1" * 40), None),
+            (dict(GITHUB_EVENT_NAME="pull_request", BASE_REF="main", BASE_SHA="1" * 40), None),
+            # Another default branch name is honoured.
+            (dict(GITHUB_REF="refs/heads/trunk", DEFAULT_BRANCH="trunk", BEFORE_SHA=self.base),
+             self.base),
+        ]
+        for env, expected in cases:
+            with self.subTest(env=env):
+                args = self.ci_choice(**env)
+                self.assertEqual(args[-3:], ["--change", "HEAD", "--all"])
+                if expected is None:
+                    self.assertNotIn("--trusted", args)
+                else:
+                    self.assertEqual(args[args.index("--trusted") + 1], expected)
+
+    def test_quoted_path_key_refused(self):
+        with open(os.path.join(self.dir, ".gitleaks.toml"), "a") as handle:
+            handle.write('\n[[rules]]\nid = "x"\n"path" = \'\'\'\\.x$\'\'\'\n')
+        self.git("add", "-A")
+        self.git("commit", "-q", "--no-verify", "-m", "chore: settings")
+        self.assert_refused(self.ci_scan(), "path-based rule")
+
+    def test_reviewed_allowlist_applies_once_trusted(self):
+        # A loosened setting takes effect once it is in the trusted revision.
+        self.weaken_config()
+        self.git("add", "-A")
+        self.git("commit", "-q", "--no-verify", "-m", "chore: reviewed settings")
+        reviewed = self.git("rev-parse", "HEAD")
+        sha = self.commit_secret()
+        result = self.run_cmd(sys.executable, "scripts/guards/secretscan.py", "commits",
+                              "--trusted", reviewed, f"{reviewed}..{sha}")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_trusted_revision_without_settings_refused(self):
+        self.git("rm", "-q", ".gitleaks.toml")
+        self.git("commit", "-q", "--no-verify", "-m", "chore: drop settings")
+        bare = self.git("rev-parse", "HEAD")
+        self.assert_refused(self.ci_scan(trusted=bare), "has no .gitleaks.toml")
+
+    def test_no_settings_anywhere_refused(self):
+        self.git("update-ref", "-d", "refs/remotes/origin/main")
+        self.git("rm", "-q", ".gitleaks.toml")
+        self.git("commit", "-q", "--no-verify", "-m", "chore: drop settings")
+        self.stage_secret()
+        self.assert_refused(self.run_cmd(sys.executable, "scripts/guards/secretscan.py", "staged"),
+                            "found no .gitleaks.toml")
+
+    def test_no_reviewed_revision_refused(self):
+        sha = self.commit_secret()
+        self.assert_refused(self.run_cmd(sys.executable, "scripts/guards/secretscan.py",
+                                         "commits", sha), "no reviewed revision")
+        self.git("update-ref", "-d", "refs/remotes/origin/main")
+        self.assert_refused(self.pre_push(sha, remote_ref="refs/heads/feat"), "no reviewed revision")
+
+    def test_other_branches_settings_dont_count_in_ci(self):
+        # A stale branch with older, stricter settings, and a branch with
+        # unusable settings, must not affect the scan of this change.
+        self.git("branch", "stale", self.base)
+        self.git("checkout", "-q", "-b", "broken")
+        with open(os.path.join(self.dir, ".gitleaks.toml"), "a") as handle:
+            handle.write('\n[[rules]]\nid = "x"\npath = \'\'\'\\.x$\'\'\'\n')
+        self.git("add", "-A")
+        self.git("commit", "-q", "--no-verify", "-m", "chore: broken settings")
+        self.git("checkout", "-q", "-")
+        self.weaken_config()
+        self.git("add", "-A")
+        self.git("commit", "-q", "--no-verify", "-m", "chore: reviewed settings")
+        reviewed = self.git("rev-parse", "HEAD")
+        self.commit_secret()
+        result = self.ci_scan(trusted=reviewed)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_path_rule_in_config_refused(self):
         with open(os.path.join(self.dir, ".gitleaks.toml"), "a") as handle:
             handle.write('\n[[rules]]\nid = "x"\npath = \'\'\'\\.x$\'\'\'\n')
+        self.git("add", "-A")
+        self.git("commit", "-q", "--no-verify", "-m", "chore: settings")
         self.assert_refused(self.ci_scan(), "path-based rule")
 
     def test_bad_revision_refused(self):

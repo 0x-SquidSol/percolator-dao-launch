@@ -21,6 +21,10 @@ updates=$(cat)
 printf '%s\n' "$updates" | "$PY" scripts/guards/guard.py pre-push || exit 1
 
 zero=0000000000000000000000000000000000000000
+# Scan settings are trusted only from reviewed history: the remote's main.
+# (Another branch's earlier tip was written by whoever pushes to it.) A
+# stale local copy of main is still reviewed, only older, so stricter.
+main_tip=$(git rev-parse -q --verify "refs/remotes/$1/main^{commit}" 2>/dev/null || true)
 printf '%s\n' "$updates" | while read -r local_ref local_sha remote_ref remote_sha; do
   [ -n "$local_sha" ] || continue
   [ "$local_sha" = "$zero" ] && continue  # deleting a ref: nothing to scan
@@ -33,8 +37,16 @@ printf '%s\n' "$updates" | while read -r local_ref local_sha remote_ref remote_s
     # Existing ref: git passes the remote's real tip, so only new commits.
     range="$remote_sha..$local_sha"
   fi
+  if [ "$remote_ref" = refs/heads/main ] && [ "$remote_sha" != "$zero" ]; then
+    trusted="--trusted $remote_sha"  # main before this push
+  elif [ -n "$main_tip" ]; then
+    trusted="--trusted $main_tip"
+  else
+    trusted=""  # nothing reviewed known here: the scan refuses (fetch main)
+  fi
   # $range is unquoted on purpose: it may be a two-dot range of commit IDs.
   "$PY" scripts/guards/provenance.py commits $range || exit 1
   # gitleaks reads the stored bytes, never git's diff output (see the script).
-  "$PY" scripts/guards/secretscan.py commits $range || exit 1
+  # $trusted is unquoted on purpose too: it is empty or two words.
+  "$PY" scripts/guards/secretscan.py commits $trusted $range || exit 1
 done

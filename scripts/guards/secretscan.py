@@ -16,16 +16,23 @@ each file's bytes are copied to a temporary folder and scanned there with
     silently read nothing (a config that allows everything, a gitleaks
     change) never passes.
   - A committed `.gitleaksignore` is never used.
+  - The settings (.gitleaks.toml) never come from the working tree: a
+    trusted revision's version and every version the change brings are all
+    used, and a finding under any of them counts (see listing), so a change
+    can't loosen its own scan.
 
 Fails closed: gitleaks missing or failing, a missing or inconsistent report,
-a file gitfiles can't check, a file too large to read, or a config rule that
-matches on paths. Findings print the short commit, rule and line, and the
-path unless it could be private.
+a file gitfiles can't check, a file too large to read, no settings to scan
+with, or a settings rule that matches on paths. Findings print the short
+commit, rule and line, and the path unless it could be private.
 
 Usage:
   secretscan.py staged                 the staged changes (pre-commit)
-  secretscan.py commits <revisions>    every commit in a range (pre-push, CI),
-                                       e.g. a..b, a single id, or --all
+  secretscan.py commits --trusted REV [--change REV2] <revisions>
+                                       every commit in a range (pre-push, CI),
+                                       e.g. a..b, a single id, or --all;
+                                       REV is reviewed main, REV2 the commit
+                                       whose settings changes count
 """
 import json
 import os
@@ -107,27 +114,81 @@ def marker_path(path):
     return os.path.join(*kept)
 
 
-def check_config():
+def check_config(data):
     """Rules of our own that match on paths can't be checked this way (the
     content copy has no path, the marker has no content), so refuse them
     rather than silently drop them."""
     try:
-        with open(CONFIG, encoding="utf-8") as handle:
-            text = handle.read()
-    except OSError:
-        refuse(f"could not read {CONFIG}")
-    if re.search(r"(?m)^\s*path\s*=", text):
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        refuse(f"a version of {CONFIG} is not valid UTF-8")
+    if re.search(r"""(?m)^\s*(?:["']path["']|path)\s*=""", text):
         refuse(f"{CONFIG} has a path-based rule, which this scan does not support")
 
 
+def config_blobs(revisions):
+    """Blob ids of .gitleaks.toml in each revision ("" means the index) that
+    has one."""
+    if not revisions:
+        return set()
+    query = "".join(f"{revision}:{CONFIG}\n" for revision in revisions).encode()
+    result = subprocess.run(["git", "cat-file", "--batch-check"], input=query,
+                            capture_output=True)
+    if result.returncode != 0:
+        refuse("could not read the scan settings from git")
+    blobs = set()
+    for line in result.stdout.decode("utf-8", errors="replace").splitlines():
+        parts = line.split()
+        if len(parts) == 3 and parts[1] == "blob":
+            blobs.add(parts[0])
+        elif not line.endswith(" missing"):
+            refuse(f"{CONFIG} in some revision is not a file")
+    return blobs
+
+
+def resolve(revision):
+    """The commit id a revision names, or None."""
+    result = subprocess.run(["git", "rev-parse", "-q", "--verify", f"{revision}^{{commit}}"],
+                            capture_output=True)
+    return result.stdout.decode("ascii").strip() if result.returncode == 0 else None
+
+
 def listing(mode, args):
-    """[(label, Entry)] for every file to scan."""
+    """[(label, Entry)] for every file to scan, and the blob ids of every
+    .gitleaks.toml version to scan them with.
+
+    The settings never come from the working tree, which the change being
+    checked controls. They come from an already-trusted revision plus every
+    version the change brings, and a finding under any of them counts, so a
+    change can add rules but never loosen its own scan:
+      staged:  HEAD's, the upstream branch's and origin/main's settings,
+               and the staged ones;
+      commits: --trusted REV's settings (REV is reviewed main) and those of
+               every commit the change brings that REV lacks; the change is
+               --change REV2 if given (CI: the event's own commit, so other
+               branches' settings don't count), else the scanned revisions.
+               No --trusted: refused, as there is nothing reviewed to go by."""
     if mode == "staged":
         if args:
             refuse("'staged' takes no arguments")
         entries, refusals = gitfiles.staged()
         pairs = [("staged", entry) for entry in entries]
+        reviewed = ("HEAD", "@{upstream}", "refs/remotes/origin/main")
+        trusted = [rev for rev in map(resolve, reviewed) if rev]
+        configs = config_blobs(trusted + [""])
     else:
+        options = {}
+        while args[:1] in (["--trusted"], ["--change"]):
+            if len(args) < 2:
+                refuse(f"{args[0]} needs a revision")
+            options[args[0]] = resolve(args[1])
+            if options[args[0]] is None:
+                refuse(f"the {args[0][2:]} revision is not a commit here")
+            args = args[2:]
+        trusted = options.get("--trusted")
+        if trusted is None:
+            refuse("no reviewed revision to take the scan settings from: push to a "
+                   "named remote whose main you have fetched (or pass --trusted)")
         resolved = gitfiles.require_commits(args)
         shas = gitfiles._git("rev-list", *resolved).decode("ascii").split()
         pairs, refusals = [], []
@@ -135,14 +196,23 @@ def listing(mode, args):
             entries, refused = gitfiles.in_commit(sha)
             refusals += refused
             pairs += [(sha[:10], entry) for entry in entries]
+        configs = config_blobs([trusted])
+        if not configs:
+            refuse(f"the trusted revision has no {CONFIG}")
+        change = [options["--change"]] if "--change" in options else resolved
+        brought = gitfiles._git("rev-list", *change, "^" + trusted).decode("ascii").split()
+        configs |= config_blobs(brought)
     if refusals:
         # Never name the files: their paths could be private.
         refuse(f"{len(refusals)} file(s) can't be checked (submodule, unmerged or unknown type)")
-    return pairs
+    if not configs:
+        refuse(f"found no {CONFIG} to scan with")
+    return pairs, sorted(configs)
 
 
-def scan(pairs):
-    """Problems found by gitleaks, as printable lines."""
+def scan(pairs, configs):
+    """Problems found by gitleaks under any of the settings, as printable
+    lines."""
     gitleaks = shutil.which("gitleaks")
     if gitleaks is None:
         refuse("gitleaks is required (see scripts/README.md)")
@@ -173,27 +243,41 @@ def scan(pairs):
                 handle.write(HEADER + CANARY)  # written like every content copy
             no_ignores = os.path.join(tmp, "gitleaksignore")
             open(no_ignores, "w").close()
+            settings = []
+            with gitfiles.Blobs() as blobs:
+                for blob in configs:
+                    data = blobs.read(blob)
+                    if data is None:
+                        refuse(f"a version of {CONFIG} is too large")
+                    check_config(data)
+                    path = os.path.join(tmp, f"settings-{blob}.toml")
+                    with open(path, "wb") as handle:
+                        handle.write(data)
+                    settings.append(path)
         except OSError:
             refuse("could not prepare the files to scan")
-        report = os.path.join(tmp, "report.json")
-        result = subprocess.run(
-            [gitleaks, "dir", "--config", CONFIG, "--no-banner", "--redact",
-             "--log-level", "debug", "--gitleaks-ignore-path", no_ignores,
-             "--exit-code", str(LEAKS_EXIT), "--report-format", "json",
-             "--report-path", report, root],
-            capture_output=True,
-        )
-        if result.returncode not in (0, LEAKS_EXIT):
-            refuse("gitleaks failed")
-        check_log(result.stdout + result.stderr, root)
-        try:
-            with open(report, encoding="utf-8") as handle:
-                findings = json.load(handle)
-        except (OSError, ValueError):
-            refuse("gitleaks wrote no readable report")
-        if not isinstance(findings, list) or (result.returncode == LEAKS_EXIT) != bool(findings):
-            refuse("gitleaks gave an inconsistent result")
-        return report_lines(findings, where, root, canary)
+        problems = []
+        for number, config in enumerate(settings):
+            report = os.path.join(tmp, f"report-{number}.json")
+            result = subprocess.run(
+                [gitleaks, "dir", "--config", config, "--no-banner", "--redact",
+                 "--log-level", "debug", "--gitleaks-ignore-path", no_ignores,
+                 "--exit-code", str(LEAKS_EXIT), "--report-format", "json",
+                 "--report-path", report, root],
+                capture_output=True,
+            )
+            if result.returncode not in (0, LEAKS_EXIT):
+                refuse("gitleaks failed")
+            check_log(result.stdout + result.stderr, root)
+            try:
+                with open(report, encoding="utf-8") as handle:
+                    findings = json.load(handle)
+            except (OSError, ValueError):
+                refuse("gitleaks wrote no readable report")
+            if not isinstance(findings, list) or (result.returncode == LEAKS_EXIT) != bool(findings):
+                refuse("gitleaks gave an inconsistent result")
+            problems += report_lines(findings, where, root, canary)
+        return problems
 
 
 ANSI = re.compile(rb"\x1b\[[0-9;]*m")
@@ -272,9 +356,10 @@ def main(argv):
     if len(argv) < 2 or argv[1] not in ("staged", "commits"):
         sys.exit(__doc__)
     os.chdir(gitfiles._git("rev-parse", "--show-toplevel").decode().strip())
-    check_config()
-    pairs = listing(argv[1], argv[2:])
-    problems = scan(pairs)
+    if shutil.which("gitleaks") is None:
+        refuse("gitleaks is required (see scripts/README.md)")
+    pairs, configs = listing(argv[1], argv[2:])
+    problems = scan(pairs, configs)
     if problems:
         print("secret scan: refusing, possible secrets found (redacted):", file=sys.stderr)
         for problem in sorted(set(problems)):

@@ -107,6 +107,21 @@ that output and could hide a secret. Every scan also includes a test secret
 that must be found, so a scan that read nothing never passes, and a committed
 `.gitleaksignore` is not used.
 
+The scan settings are never read from the working tree. A change is scanned
+with the settings of reviewed `main` (a PR's base when that is `main`; `main`
+before a push to `main`; the remote's current `main` for any other branch,
+tag or PR, whose own earlier tip nobody reviewed) **and** with every
+`.gitleaks.toml` the change itself brings, and a finding under any of them
+counts. So a change can add rules but can't loosen its own scan: a loosened
+setting only takes effect once it is on `main`. Other branches' settings
+don't count. With no copy of `main` at hand the push and CI scans refuse:
+push to a named remote (not a URL) whose `main` you have fetched. CI scans
+every branch's files, so a branch holding a flagged line fails every CI run
+until it is fixed with `gitleaks:allow`, merged or deleted. False positives are allowed with a `gitleaks:allow`
+comment on the line itself. The push and CI scans are the real gates; the
+commit-time scan is early feedback. Every file version is read whole, so a
+file over 25 MB anywhere in history makes the full-history scan refuse.
+
 It runs **on every commit** (in the pre-commit hook, after the leak guard),
 **before every push** over each commit being pushed (so commits made by
 merges and rebases, which skip the pre-commit hook, are scanned too), and

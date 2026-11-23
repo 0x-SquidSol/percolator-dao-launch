@@ -55,6 +55,8 @@ class PrePushRangeTest(unittest.TestCase):
         shutil.copy(os.path.join(REPO, ".gitleaks.toml"), self.work)
         self.git("add", "-A")
         self.git("commit", "-q", "-m", "init")
+        # A clone has the remote's main, whose scan settings are reviewed.
+        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
 
     def tearDown(self):
         shutil.rmtree(self.root, ignore_errors=True)
