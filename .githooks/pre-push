@@ -6,7 +6,7 @@
 # See scripts/README.md.
 . "$(dirname "$0")/find-python.sh"
 # Read the real objects a commit or push uses, not `git replace` stand-ins
-# (this also reaches gitleaks, which reads through git).
+# (the guards also set this themselves).
 export GIT_NO_REPLACE_OBJECTS=1
 
 if ! command -v gitleaks >/dev/null 2>&1; then
@@ -35,6 +35,6 @@ printf '%s\n' "$updates" | while read -r local_ref local_sha remote_ref remote_s
   fi
   # $range is unquoted on purpose: it may be a two-dot range of commit IDs.
   "$PY" scripts/guards/provenance.py commits $range || exit 1
-  gitleaks git --config .gitleaks.toml --redact --no-banner \
-    --log-opts="$range" . || exit 1
+  # gitleaks reads the stored bytes, never git's diff output (see the script).
+  "$PY" scripts/guards/secretscan.py commits $range || exit 1
 done

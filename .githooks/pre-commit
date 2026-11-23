@@ -2,7 +2,7 @@
 # Leak guard, provenance guard and secret scan for staged changes. See scripts/README.md.
 . "$(dirname "$0")/find-python.sh"
 # Read the real objects a commit or push uses, not `git replace` stand-ins
-# (this also reaches gitleaks, which reads through git).
+# (the guards also set this themselves).
 export GIT_NO_REPLACE_OBJECTS=1
 "$PY" scripts/guards/guard.py staged || exit 1
 "$PY" scripts/guards/provenance.py staged || exit 1
@@ -11,4 +11,5 @@ if ! command -v gitleaks >/dev/null 2>&1; then
   echo "secret scan: gitleaks is required for commits (see scripts/README.md)" >&2
   exit 1
 fi
-exec gitleaks git --pre-commit --staged --config .gitleaks.toml --redact --no-banner .
+# gitleaks reads the stored bytes, never git's diff output (see the script).
+exec "$PY" scripts/guards/secretscan.py staged

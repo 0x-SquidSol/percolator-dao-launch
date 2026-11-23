@@ -100,6 +100,13 @@ tokens and private keys. Settings live in `.gitleaks.toml`: gitleaks' built-in
 rules plus a custom rule for Solana secret keys in their base58 text form,
 which the built-in rules miss. Findings are redacted.
 
+`guards/secretscan.py` runs gitleaks over the stored bytes of exactly the
+files the leak guard checks, never over git's diff output: git settings
+(`.gitattributes` `-diff` or `binary`, textconv, colour, merge display) change
+that output and could hide a secret. Every scan also includes a test secret
+that must be found, so a scan that read nothing never passes, and a committed
+`.gitleaksignore` is not used.
+
 It runs **on every commit** (in the pre-commit hook, after the leak guard),
 **before every push** over each commit being pushed (so commits made by
 merges and rebases, which skip the pre-commit hook, are scanned too), and
