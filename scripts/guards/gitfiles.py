@@ -30,6 +30,83 @@ import textscan
 # Set at import, before any git runs: guard.py and provenance.py import this
 # module, so all their git processes (including cat-file --batch) inherit it.
 os.environ["GIT_NO_REPLACE_OBJECTS"] = "1"
+# Windows also starts programs from the current folder (the repository, in
+# hooks); this stops that for every process the guards start.
+os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
+
+
+def in_current_folder(path, folder="."):
+    """Whether `path`, links resolved, is `folder` (by default the current
+    folder) or inside it."""
+    top = os.stat(folder)
+    top_path = os.path.normcase(os.path.realpath(folder))
+    place = os.path.realpath(path)
+    while True:
+        here = os.stat(place)
+        if top.st_ino and here.st_ino:
+            same = os.path.samestat(here, top)
+        else:  # a file system without file IDs: compare paths
+            same = os.path.normcase(place) == top_path
+        if same:
+            return True
+        parent = os.path.dirname(place)
+        if parent == place:
+            return False
+        place = parent
+
+
+def program(name):
+    """`name` from an absolute PATH folder, or None. Searched by hand:
+    relative PATH folders point into the repository when hooks run, and
+    before Python 3.12 shutil.which also searches the current folder on
+    Windows. Only .exe on Windows, the form git and gitleaks ship in."""
+    filename = name + ".exe" if os.name == "nt" else name
+    for folder in os.environ.get("PATH", "").split(os.pathsep):
+        if folder and os.path.isabs(folder):
+            candidate = os.path.join(folder, filename)
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return os.path.abspath(candidate)
+    return None
+
+
+def _enclosing_repository():
+    """The nearest folder, from the current one up, holding a .git entry
+    (found without git, which isn't trusted yet); else the current folder."""
+    folder = os.path.realpath(".")
+    while not os.path.lexists(os.path.join(folder, ".git")):
+        parent = os.path.dirname(folder)
+        if parent == folder:
+            return "."
+        folder = parent
+    return folder
+
+
+def _find_git():
+    """The real git, never one from the repository being checked."""
+    git = program("git")
+    if git is None:
+        sys.exit("guard: refusing, git was not found in an absolute PATH folder")
+    try:
+        top = _enclosing_repository()
+        planted = (in_current_folder(os.path.dirname(git), top)
+                   or in_current_folder(git, top))
+    except OSError:
+        sys.exit("guard: refusing, could not check where git is installed")
+    if planted:
+        sys.exit("guard: refusing, git must not come from inside the repository")
+    return git
+
+
+_git_path = None
+
+
+def git_exe():
+    """The real git, found on first use (after a caller's own checks)."""
+    global _git_path
+    if _git_path is None:
+        _git_path = _find_git()
+    return _git_path
+
 
 CHECKABLE_MODES = {"100644", "100755", "120000"}  # file, executable, symlink
 CHECKABLE_STATUSES = set("ACMRT")
@@ -48,7 +125,7 @@ class Refusal(NamedTuple):
 
 
 def _git(*args):
-    result = subprocess.run(["git", *args], capture_output=True)
+    result = subprocess.run([git_exe(), *args], capture_output=True)
     if result.returncode != 0:
         # Name only the git subcommand: its arguments may contain file names.
         sys.exit(f"guard: refusing, 'git {args[0]}' failed (fetch or check the repository)")
@@ -154,7 +231,7 @@ def require_commits(rev_args):
         # everything being pushed must peel to a commit.
         target = sha[1:] if excluded else sha + "^{commit}"
         check = ["cat-file", "-e", target] if excluded else ["rev-parse", "--verify", "-q", target]
-        if subprocess.run(["git", *check], capture_output=True).returncode != 0:
+        if subprocess.run([git_exe(), *check], capture_output=True).returncode != 0:
             # No ref name or id: either could match a private pattern.
             sys.exit("guard: refusing, a pushed object is not a commit (or a tag of one)")
     return resolved
@@ -306,7 +383,7 @@ class Blobs:
 
     def __enter__(self):
         self.proc = subprocess.Popen(
-            ["git", "cat-file", "--batch"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            [git_exe(), "cat-file", "--batch"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         )
         return self
 

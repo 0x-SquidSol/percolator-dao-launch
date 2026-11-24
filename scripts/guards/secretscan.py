@@ -37,7 +37,6 @@ Usage:
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -135,7 +134,7 @@ def config_blobs(revisions):
     if not revisions:
         return set()
     query = "".join(f"{revision}:{CONFIG}\n" for revision in revisions).encode()
-    result = subprocess.run(["git", "cat-file", "--batch-check"], input=query,
+    result = subprocess.run([gitfiles.git_exe(), "cat-file", "--batch-check"], input=query,
                             capture_output=True)
     if result.returncode != 0:
         refuse("could not read the scan settings from git")
@@ -151,7 +150,7 @@ def config_blobs(revisions):
 
 def resolve(revision):
     """The commit id a revision names, or None."""
-    result = subprocess.run(["git", "rev-parse", "-q", "--verify", f"{revision}^{{commit}}"],
+    result = subprocess.run([gitfiles.git_exe(), "rev-parse", "-q", "--verify", f"{revision}^{{commit}}"],
                             capture_output=True)
     return result.stdout.decode("ascii").strip() if result.returncode == 0 else None
 
@@ -360,37 +359,13 @@ def report_lines(findings, where, root, canary):
     return problems
 
 
-def in_current_folder(path):
-    """Whether `path`, links resolved, is the current folder or inside it."""
-    top = os.stat(".")
-    top_path = os.path.normcase(os.path.realpath("."))
-    place = os.path.realpath(path)
-    while True:
-        here = os.stat(place)
-        if top.st_ino and here.st_ino:
-            same = os.path.samestat(here, top)
-        else:  # a file system without file IDs: compare paths
-            same = os.path.normcase(place) == top_path
-        if same:
-            return True
-        parent = os.path.dirname(place)
-        if parent == place:
-            return False
-        place = parent
-
-
 def find_gitleaks():
-    """gitleaks from an absolute PATH folder. The repository being scanned
-    must never choose its own scanner: Windows also searches the current
-    folder (and finds .cmd, .bat and the like), and relative PATH folders
-    point into the repository when hooks run."""
-    os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"  # Windows, Python 3.12+
-    folders = os.environ.get("PATH", "").split(os.pathsep)
-    search = os.pathsep.join(folder for folder in folders if folder and os.path.isabs(folder))
-    gitleaks = shutil.which("gitleaks", path=search)
+    """gitleaks from an absolute PATH folder (see gitfiles.program): the
+    repository being scanned must never choose its own scanner."""
+    gitleaks = gitfiles.program("gitleaks")
     if gitleaks is None:
         refuse("gitleaks is required (see scripts/README.md)")
-    return os.path.abspath(gitleaks)
+    return gitleaks
 
 
 def main(argv):
@@ -398,13 +373,15 @@ def main(argv):
         sys.exit(__doc__)
     gitleaks = find_gitleaks()  # before git is used
     os.chdir(gitfiles._git("rev-parse", "--show-toplevel").decode().strip())
-    # Older Pythons on Windows search the current folder whatever the path.
+    # Now from the top folder: neither program may come from the repository.
+    places = [os.path.dirname(gitleaks), gitleaks,
+              os.path.dirname(gitfiles.git_exe()), gitfiles.git_exe()]
     try:
-        planted = any(in_current_folder(place) for place in (os.path.dirname(gitleaks), gitleaks))
+        planted = any(gitfiles.in_current_folder(place) for place in places)
     except OSError:
-        refuse("could not check where gitleaks is installed")
+        refuse("could not check where gitleaks and git are installed")
     if planted:
-        refuse("gitleaks must not come from inside the repository")
+        refuse("gitleaks and git must not come from inside the repository")
     pairs, configs = listing(argv[1], argv[2:])
     problems = scan(pairs, configs, gitleaks)
     if problems:

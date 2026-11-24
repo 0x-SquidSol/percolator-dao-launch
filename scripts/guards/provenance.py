@@ -111,7 +111,7 @@ check_exemptions(LICENSE_DISCUSSION)
 
 
 def git(*args):
-    result = subprocess.run(["git", *args], capture_output=True)
+    result = subprocess.run([gitfiles.git_exe(), *args], capture_output=True)
     if result.returncode != 0:
         sys.exit(f"provenance: git {args[0]} failed")
     return result.stdout

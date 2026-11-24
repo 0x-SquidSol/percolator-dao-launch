@@ -46,6 +46,16 @@ They run in three places:
 CI can only detect a leak after it is public, so the local hooks are the real
 protection. Never bypass them with `--no-verify`.
 
+Files in the repository can never stand in for the tools the checks run.
+The hooks use only `PATH` folders that are absolute and outside the
+repository (links followed), so a venv inside it is skipped too, since a pull
+overwrites ignored files: the hooks need a Python 3.8+ outside the
+repository. They also tell pyenv, asdf and mise to use the system Python,
+so a committed `.python-version` or `.tool-versions` can't choose one. The
+guards run `git` and `gitleaks` by full path from absolute `PATH` folders and
+refuse either if it is inside the repository. On Windows only `.exe`
+programs are used, not `.cmd` or `.bat` wrappers.
+
 ### One-time setup per clone
 
 ```sh

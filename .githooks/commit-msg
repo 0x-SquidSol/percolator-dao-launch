@@ -1,4 +1,7 @@
 #!/bin/sh
 # Leak guard for the commit message and branch name. See scripts/README.md.
-. "$(dirname "$0")/find-python.sh"
+# The hook's folder, without running a program (PATH isn't clean yet).
+hook_dir=${0%/*}
+case $hook_dir in "$0") hook_dir=${0%\\*} ;; esac  # a Windows-style path
+. "$hook_dir/find-python.sh"
 exec "$PY" scripts/guards/guard.py message "$1"

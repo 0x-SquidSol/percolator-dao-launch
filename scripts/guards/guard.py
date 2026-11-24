@@ -48,7 +48,7 @@ SECRET_KEY_ARRAY = re.compile(r"\[\s*(?:\d{1,3}\s*,\s*){63}\d{1,3}\s*\]")
 
 
 def git(*args, check=True):
-    result = subprocess.run(["git", *args], capture_output=True)
+    result = subprocess.run([gitfiles.git_exe(), *args], capture_output=True)
     if check and result.returncode != 0:
         # Name only the git subcommand: its arguments may contain file names.
         sys.exit(f"guard: refusing, 'git {args[0]}' failed (fetch or check the repository)")
@@ -243,7 +243,7 @@ def commit_bodies(shas):
     if not shas:
         return {}
     result = subprocess.run(
-        ["git", "cat-file", "--batch"],
+        [gitfiles.git_exe(), "cat-file", "--batch"],
         input=("\n".join(shas) + "\n").encode(), capture_output=True,
     )
     if result.returncode != 0:

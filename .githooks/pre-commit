@@ -1,6 +1,9 @@
 #!/bin/sh
 # Leak guard, provenance guard and secret scan for staged changes. See scripts/README.md.
-. "$(dirname "$0")/find-python.sh"
+# The hook's folder, without running a program (PATH isn't clean yet).
+hook_dir=${0%/*}
+case $hook_dir in "$0") hook_dir=${0%\\*} ;; esac  # a Windows-style path
+. "$hook_dir/find-python.sh"
 # Read the real objects a commit or push uses, not `git replace` stand-ins
 # (the guards also set this themselves).
 export GIT_NO_REPLACE_OBJECTS=1
