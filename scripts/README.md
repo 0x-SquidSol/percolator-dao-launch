@@ -56,6 +56,18 @@ guards run `git` and `gitleaks` by full path from absolute `PATH` folders and
 refuse either if it is inside the repository. On Windows only `.exe`
 programs are used, not `.cmd` or `.bat` wrappers.
 
+The same goes for Python modules. Each guard script first takes every
+repository folder off Python's import path, then loads its sibling modules
+from their `.py` source text, so a committed package folder, compiled
+extension, cached bytecode (even in an ignored `__pycache__`) or a file
+named like a standard module (`subprocess.py`) is never used. Hooks and CI
+start the guard scripts with `-I`, so environment settings such as
+`PYTHONPATH` can't point Python back into the repository. In CI the
+self-tests, which import repository code the normal way, run in a job of
+their own, never before the scans. Commits are refused if they add cached
+bytecode (`__pycache__/`, `.pyc`) anywhere, a `.so` under `scripts/`, or
+anything other than `.py` files and `setup.sh` to `scripts/guards/`.
+
 ### One-time setup per clone
 
 ```sh

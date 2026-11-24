@@ -51,7 +51,7 @@ export PYENV_VERSION ASDF_PYTHON_VERSION MISE_PYTHON_VERSION
 
 PY=""
 for candidate in python3 python py; do
-  if "$candidate" -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" >/dev/null 2>&1; then
+  if "$candidate" -I -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" >/dev/null 2>&1; then
     PY="$candidate"
     break
   fi

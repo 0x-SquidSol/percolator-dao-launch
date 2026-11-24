@@ -64,7 +64,7 @@ jobs:
       - name: Dependency audit (fails on anything not reviewed)
         run: |
           set -o pipefail
-          { yarn audit --json || true; } | python3 scripts/guards/js_audit.py yarn-audit-allowlist.json
+          { yarn audit --json || true; } | python3 -I scripts/guards/js_audit.py yarn-audit-allowlist.json
 
   # The TypeScript claim-list code and the Rust verifier must agree on
   # random lists in both directions (scripts/merkle-differential.ts). The

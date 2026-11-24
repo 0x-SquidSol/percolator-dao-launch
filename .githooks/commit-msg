@@ -4,4 +4,4 @@
 hook_dir=${0%/*}
 case $hook_dir in "$0") hook_dir=${0%\\*} ;; esac  # a Windows-style path
 . "$hook_dir/find-python.sh"
-exec "$PY" scripts/guards/guard.py message "$1"
+exec "$PY" -I scripts/guards/guard.py message "$1"

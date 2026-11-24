@@ -21,7 +21,7 @@ fi
 # ref. Both checks need it, so keep a copy.
 updates=$(cat)
 
-printf '%s\n' "$updates" | "$PY" scripts/guards/guard.py pre-push || exit 1
+printf '%s\n' "$updates" | "$PY" -I scripts/guards/guard.py pre-push || exit 1
 
 zero=0000000000000000000000000000000000000000
 # Scan settings are trusted only from reviewed history: the remote's main.
@@ -49,8 +49,8 @@ printf '%s\n' "$updates" | while read -r local_ref local_sha remote_ref remote_s
     trusted=""  # nothing reviewed known here: the scan refuses (fetch main)
   fi
   # $range is unquoted on purpose: it may be a two-dot range of commit IDs.
-  "$PY" scripts/guards/provenance.py commits $range || exit 1
+  "$PY" -I scripts/guards/provenance.py commits $range || exit 1
   # gitleaks reads the stored bytes, never git's diff output (see the script).
   # $trusted is unquoted on purpose too: it is empty or two words.
-  "$PY" scripts/guards/secretscan.py commits $trusted $range || exit 1
+  "$PY" -I scripts/guards/secretscan.py commits $trusted $range || exit 1
 done

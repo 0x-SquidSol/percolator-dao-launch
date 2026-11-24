@@ -7,12 +7,12 @@ case $hook_dir in "$0") hook_dir=${0%\\*} ;; esac  # a Windows-style path
 # Read the real objects a commit or push uses, not `git replace` stand-ins
 # (the guards also set this themselves).
 export GIT_NO_REPLACE_OBJECTS=1
-"$PY" scripts/guards/guard.py staged || exit 1
-"$PY" scripts/guards/provenance.py staged || exit 1
+"$PY" -I scripts/guards/guard.py staged || exit 1
+"$PY" -I scripts/guards/provenance.py staged || exit 1
 
 if ! command -v gitleaks >/dev/null 2>&1; then
   echo "secret scan: gitleaks is required for commits (see scripts/README.md)" >&2
   exit 1
 fi
 # gitleaks reads the stored bytes, never git's diff output (see the script).
-exec "$PY" scripts/guards/secretscan.py staged
+exec "$PY" -I scripts/guards/secretscan.py staged

@@ -8,6 +8,9 @@ permissions:
   contents: read
 
 jobs:
+  # The scans run on their own runner: nothing in this job imports repository
+  # code the normal way (tests do), so committed bytecode or modules can't
+  # change the scans before they run.
   guards:
     runs-on: ubuntu-latest
     steps:
@@ -16,27 +19,19 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Guard self-tests
-        run: python3 -m unittest discover -s scripts/guards -p "test_*.py" -v
-
       - name: Scan branch or tag name
         env:
           GUARD_PATTERNS: ${{ secrets.GUARD_PATTERNS }}
           HEAD_REF: ${{ github.head_ref }}
-        run: python3 scripts/guards/guard.py ref "${HEAD_REF:-$GITHUB_REF_NAME}"
+        run: python3 -I scripts/guards/guard.py ref "${HEAD_REF:-$GITHUB_REF_NAME}"
 
       - name: Scan tracked files
         env:
           GUARD_PATTERNS: ${{ secrets.GUARD_PATTERNS }}
-        run: python3 scripts/guards/guard.py tree
-
-      - name: Claim-list spec (reference tests, vectors up to date)
-        run: |
-          python3 -m unittest discover -s scripts/spec -p "test_*.py" -v
-          python3 scripts/spec/merkle_reference.py check
+        run: python3 -I scripts/guards/guard.py tree
 
       - name: Provenance guard (no BSL-licensed MetaDAO material)
-        run: python3 scripts/guards/provenance.py tree
+        run: python3 -I scripts/guards/provenance.py tree
 
       # Defence in depth only. A tag can point at a blob or tree, which the
       # commit scans below never see. The real protection is the pre-push
@@ -52,8 +47,8 @@ jobs:
           # only a ref to its commit; the tag's own text is checked only in
           # the first case.
           echo "pushed tag is a $(git cat-file -t "$PUSHED_REF")"
-          python3 scripts/guards/guard.py commits "$PUSHED_REF"
-          python3 scripts/guards/provenance.py commits "$PUSHED_REF"
+          python3 -I scripts/guards/guard.py commits "$PUSHED_REF"
+          python3 -I scripts/guards/provenance.py commits "$PUSHED_REF"
 
       - name: Scan every pushed commit (identities, messages, files, provenance)
         env:
@@ -62,9 +57,25 @@ jobs:
           BEFORE: ${{ github.event.before }}
         run: |
           if [ "$EVENT_NAME" = "push" ] && [ -n "$BEFORE" ] && ! echo "$BEFORE" | grep -qE '^0+$'; then
-            python3 scripts/guards/guard.py commits "$BEFORE..$GITHUB_SHA"
-            python3 scripts/guards/provenance.py commits "$BEFORE..$GITHUB_SHA"
+            python3 -I scripts/guards/guard.py commits "$BEFORE..$GITHUB_SHA"
+            python3 -I scripts/guards/provenance.py commits "$BEFORE..$GITHUB_SHA"
           else
-            python3 scripts/guards/guard.py commits HEAD
-            python3 scripts/guards/provenance.py commits HEAD
+            python3 -I scripts/guards/guard.py commits HEAD
+            python3 -I scripts/guards/provenance.py commits HEAD
           fi
+
+  self-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Guard self-tests
+        run: python3 -m unittest discover -s scripts/guards -p "test_*.py" -v
+
+      - name: Claim-list spec (reference tests, vectors up to date)
+        run: |
+          python3 -m unittest discover -s scripts/spec -p "test_*.py" -v
+          python3 scripts/spec/merkle_reference.py check

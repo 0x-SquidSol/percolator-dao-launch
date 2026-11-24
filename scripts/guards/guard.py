@@ -17,16 +17,49 @@ Usage:
                              messages, file names and file contents (CI)
   guard.py ref <name>        check a branch or tag name (CI)
 """
-import codecs
-import os
-import re
-import subprocess
-import sys
+# --- start-up block: the same in every script run directly (a test checks) ---
+# Python searches this script's folder first, and there a committed package
+# folder, compiled extension or cached bytecode wins over the reviewed .py
+# file, and a file such as subprocess.py replaces the real module. So before
+# anything else is imported, every folder inside the repository leaves the
+# import path, and sibling modules are compiled from their source text only.
+import sys  # built in
 
-# Make the sibling module importable however the script is started.
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import gitfiles  # noqa: E402
-import textscan  # noqa: E402
+if "os" not in sys.modules:  # loaded by start-up, before this folder is searched
+    sys.exit("guard: refusing, Python started without its usual set-up (-S?)")
+import os  # noqa: E402
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+
+
+def _in_repository(folder):
+    top = os.path.normcase(os.path.dirname(os.path.dirname(HERE)))
+    place = os.path.normcase(os.path.realpath(folder or os.curdir))
+    return place == top or place.startswith(top.rstrip(os.sep) + os.sep)
+
+
+if __name__ == "__main__":
+    sys.path[:] = [folder for folder in sys.path if not _in_repository(folder)]
+
+
+def load_sibling(name):
+    """NAME.py beside this script, compiled from its source: never cached
+    bytecode, a compiled extension or a package folder of that name."""
+    if name not in sys.modules:
+        path = os.path.join(HERE, name + ".py")
+        module = sys.modules[name] = type(sys)(name)
+        module.__file__ = path
+        with open(path, "rb") as handle:
+            exec(compile(handle.read(), path, "exec", dont_inherit=True), module.__dict__)
+    return sys.modules[name]
+# --- end of start-up block ---
+
+import codecs  # noqa: E402
+import re  # noqa: E402
+import subprocess  # noqa: E402
+
+textscan = load_sibling("textscan")  # before gitfiles, which imports it
+gitfiles = load_sibling("gitfiles")
 
 PATTERNS_FILE = os.path.join("private", "guard-patterns.txt")
 
@@ -41,6 +74,12 @@ FORBIDDEN_PATHS = [
     (re.compile(r"keypair[^/]*\.json$", re.IGNORECASE), "keypair file"),
     (re.compile(r"(^|/)id\.json$"), "wallet file"),
     (re.compile(r"\.pem$", re.IGNORECASE), "private key file"),
+    # Python could run these in place of reviewed source (see the start-up
+    # block above), so they are refused even though it no longer does.
+    (re.compile(r"(^|/)__pycache__/|\.py[cdo]$|^scripts/.*\.so$", re.IGNORECASE),
+     "compiled Python file"),
+    (re.compile(r"^(?i:scripts/guards)/(?![a-z0-9_]+\.py$|setup\.sh$)"),
+     "only .py source files and setup.sh belong in scripts/guards"),
 ]
 
 # A Solana secret key exported as JSON: an array of exactly 64 byte values.

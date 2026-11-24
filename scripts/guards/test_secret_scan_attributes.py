@@ -202,9 +202,9 @@ class SecretScanAttributesTest(unittest.TestCase):
         # The command secrets.yml runs over the full history (with the PR's
         # base or main before the push as the trusted revision, if any).
         with open(os.path.join(REPO, ".github", "workflows", "secrets.yml")) as handle:
-            self.assertIn("python3 scripts/guards/secretscan.py commits $trusted --change HEAD --all",
+            self.assertIn("python3 -I scripts/guards/secretscan.py commits $trusted --change HEAD --all",
                       handle.read())
-        return self.run_cmd(sys.executable, "scripts/guards/secretscan.py", "commits",
+        return self.run_cmd(sys.executable, "-I", "scripts/guards/secretscan.py", "commits",
                             "--trusted", trusted or self.base, "--change", "HEAD", "--all")
 
     def assert_found(self, result, rule="github-pat"):
