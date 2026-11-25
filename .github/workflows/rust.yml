@@ -42,6 +42,37 @@ jobs:
           done
           exit "$missing"
 
+      # cargo-mutants ignores cfg, so Kani-only code (never compiled by the
+      # tests) is skipped by a marker on the next line. Fail if a Kani item
+      # lacks it, if it appears anywhere else, if Kani code uses another cfg
+      # form, or if a mutants config file or crate could hide real code.
+      - name: Only Kani-only code is skipped by mutation testing
+        run: |
+          set -o pipefail
+          bad=0
+          git ls-files -z -- '*.rs' | xargs -0 -r awk '
+            { sub(/\r$/, ""); line = $0; sub(/^[ \t]+/, "", line) }
+            FNR == 1 { prev = "" }
+            line == "#[cfg_attr(test, mutants::skip)]" && prev != "#[cfg(kani)]" {
+              print FILENAME ":" FNR ": skip marker not right after #[cfg(kani)]"; bad = 1
+            }
+            prev == "#[cfg(kani)]" && line != "#[cfg_attr(test, mutants::skip)]" {
+              print FILENAME ":" FNR - 1 ": #[cfg(kani)] without the skip marker after it"; bad = 1
+            }
+            line !~ /^\/\// && line ~ /kani/ && line ~ /cfg/ && line != "#[cfg(kani)]" && line != "#[cfg(not(kani))]" {
+              print FILENAME ":" FNR ": unsupported kani cfg form: " line; bad = 1
+            }
+            # Any other code mentioning mutants, so a spaced or split
+            # "mutants :: skip" cannot slip through.
+            line !~ /^\/\// && line ~ /(^|[^A-Za-z0-9_])mutants([^A-Za-z0-9_]|$)/ && line != "#[cfg_attr(test, mutants::skip)]" {
+              print FILENAME ":" FNR ": unexpected use of mutants: " line; bad = 1
+            }
+            { prev = line }
+            END { exit bad }' || bad=1
+          if [ -e .cargo/mutants.toml ]; then echo "no .cargo/mutants.toml allowed"; bad=1; fi
+          if grep -q '^name = "mutants"$' Cargo.lock; then echo "no mutants crate allowed"; bad=1; fi
+          exit "$bad"
+
       - name: Formatting
         run: cargo fmt --all --check
 

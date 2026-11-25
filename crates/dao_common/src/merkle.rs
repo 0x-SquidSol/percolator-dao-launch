@@ -108,8 +108,15 @@ fn node_hash(low: &[u8; 32], high: &[u8; 32]) -> [u8; 32] {
 // stand-ins. They are deterministic and depend on every input field, and the
 // node stand-in depends on argument order, so the proofs about the
 // surrounding logic stay meaningful. Never compiled into real builds.
+//
+// cargo-mutants ignores `cfg`, so mutants in Kani-only code, which tests
+// never compile, would all count as missed. Every `#[cfg(kani)]` item is
+// therefore followed by `#[cfg_attr(test, mutants::skip)]`, and CI checks
+// that pairing. There is no `mutants` crate, so the line breaks the test
+// build if copied onto real code (and `cargo kani --tests`, which is unused).
 
 #[cfg(kani)]
+#[cfg_attr(test, mutants::skip)]
 fn leaf_hash(
     domain: Domain,
     distribution: &[u8; 32],
@@ -126,6 +133,7 @@ fn leaf_hash(
 }
 
 #[cfg(kani)]
+#[cfg_attr(test, mutants::skip)]
 fn node_hash(low: &[u8; 32], high: &[u8; 32]) -> [u8; 32] {
     core::array::from_fn(|i| low[i] ^ high[i].rotate_left(1) ^ NODE_PREFIX)
 }
@@ -455,8 +463,10 @@ mod tests {
 /// Every harness ends with `kani::cover!` checks that CI requires to be met
 /// (see the kani workflow), showing its cases are really reached. A cover
 /// only shows the code before it is reachable, so covers come last, and
-/// both outcomes are covered where there are two.
+/// both outcomes are covered where there are two. Skipped by mutation
+/// testing like the stand-ins above.
 #[cfg(kani)]
+#[cfg_attr(test, mutants::skip)]
 mod proofs {
     use super::*;
 

@@ -28,8 +28,15 @@ jobs:
       - name: Install cargo-mutants
         run: cargo +stable install --locked cargo-mutants@27.1.0
 
+      - name: Show toolchain (installs the pinned version)
+        run: rustup show active-toolchain && cargo --version
+
+      # Kani-only code is skipped by markers in the source (checked in the
+      # rust workflow). --no-config ignores any mutants config file, so only
+      # those markers and test code (which cargo-mutants always skips) are
+      # left out.
       - name: Run mutation tests
-        run: cargo mutants --workspace --no-shuffle --cargo-arg=--locked
+        run: cargo mutants --workspace --no-shuffle --no-config --cargo-arg=--locked
 
       - name: Upload report
         if: always()
