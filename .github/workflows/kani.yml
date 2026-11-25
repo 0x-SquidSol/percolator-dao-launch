@@ -32,5 +32,23 @@ jobs:
           cargo +stable install --locked kani-verifier@"$KANI_VERSION"
           cargo +stable kani setup
 
+      # Kani passes a kani::cover! it can never meet, so a proof whose
+      # assumptions rule out every input would still pass. Fail unless every
+      # harness in the source ran, has covers and met them all, and Kani
+      # finished with no failures (a changed log format fails too).
       - name: Run every proof
-        run: cargo kani -p dao_common
+        run: |
+          set -o pipefail
+          cargo kani -p dao_common 2>&1 | tee "$RUNNER_TEMP/kani.log"
+          want=$(grep -rhoE '#\[kani::proof\]' crates/dao_common/src | wc -l)
+          awk -v want="$want" '
+            /cover properties satisfied/ {
+              n++
+              if ($2 != $4 || $2 == 0) { bad = 1; print "unmet cover: " $0 }
+            }
+            /^Complete - / { done = ($3 == want && $7 == "0") }
+            END {
+              if (n != want) print "harnesses with cover results: " n ", expected " want
+              if (!done) print "no clean finish for " want " harnesses"
+              exit bad || n != want || !done
+            }' "$RUNNER_TEMP/kani.log"

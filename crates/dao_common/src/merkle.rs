@@ -451,6 +451,11 @@ mod tests {
 
 /// Kani proofs: these hold for every possible input, not just examples.
 /// Run with `cargo kani` (Linux). The hash is the stand-in above.
+///
+/// Every harness ends with `kani::cover!` checks that CI requires to be met
+/// (see the kani workflow), showing its cases are really reached. A cover
+/// only shows the code before it is reachable, so covers come last, and
+/// both outcomes are covered where there are two.
 #[cfg(kani)]
 mod proofs {
     use super::*;
@@ -489,6 +494,7 @@ mod proofs {
         let root: [u8; 32] = kani::any();
         let candidate: [u8; 32] = kani::any();
         assert!(!verify_proof(&siblings, &root, candidate));
+        kani::cover!(true, "the end is reached");
     }
 
     /// Combining two hashes gives the same result in either order.
@@ -505,7 +511,10 @@ mod proofs {
     fn empty_proof_accepts_only_the_root() {
         let root: [u8; 32] = kani::any();
         let candidate: [u8; 32] = kani::any();
-        assert_eq!(verify_proof(&[], &root, candidate), candidate == root);
+        let accepted = verify_proof(&[], &root, candidate);
+        assert_eq!(accepted, candidate == root);
+        kani::cover!(accepted, "some entry is accepted");
+        kani::cover!(!accepted, "some entry is rejected");
     }
 
     /// verify_claim never panics for any claim fields, with a 4-step proof.
@@ -518,7 +527,7 @@ mod proofs {
             _ => Domain::WeeklyDrop,
         };
         let siblings: [[u8; 32]; 4] = kani::any();
-        let _ = verify_claim(
+        let result = verify_claim(
             domain,
             &kani::any(),
             &kani::any(),
@@ -526,6 +535,11 @@ mod proofs {
             kani::any(),
             &siblings,
             &kani::any(),
+        );
+        kani::cover!(result.is_ok(), "some claim is accepted");
+        kani::cover!(
+            result == Err(ClaimError::NotOnList),
+            "some claim is rejected"
         );
     }
 }
