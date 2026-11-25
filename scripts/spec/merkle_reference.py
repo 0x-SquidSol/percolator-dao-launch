@@ -116,6 +116,14 @@ def build(domain: str, distribution: bytes, entries):
     return level[0], proofs
 
 
+def fold(proof, candidate: bytes) -> bytes:
+    """The root `proof` leads to from `candidate`, ignoring the length limit."""
+    h = candidate
+    for sibling in proof:
+        h = node(h, sibling)
+    return h
+
+
 def verify(proof, root: bytes, candidate: bytes) -> bool:
     if len(proof) > MAX_PROOF_LEN:
         return False
@@ -179,6 +187,18 @@ def vectors():
     wallet = pubkey(first["wallet"])
     proof = [bytes.fromhex(p) for p in first["proof"]]
     other_case = cases[2]
+    # Proofs of exactly the limit and one step over it, each with the root it
+    # leads to, so only the length check can reject the longer one.
+    pad = [sha256(b"merkle-vector-pad:", bytes([n])) for n in range(MAX_PROOF_LEN + 1)]
+    long_proof = (proof + pad)[:MAX_PROOF_LEN + 1]
+    full_proof = long_proof[:MAX_PROOF_LEN]
+    at_limit = {"why": "proof of exactly the maximum",
+                "leaf": first["leaf"], "proof": [p.hex() for p in full_proof],
+                "root": fold(full_proof, bytes.fromhex(first["leaf"])).hex()}
+    assert verify(full_proof, bytes.fromhex(at_limit["root"]), bytes.fromhex(first["leaf"]))
+    over_limit = {"why": "proof longer than the maximum",
+                  "leaf": first["leaf"], "proof": [p.hex() for p in long_proof],
+                  "root": fold(long_proof, bytes.fromhex(first["leaf"])).hex()}
     must_fail = [
         {"why": "amount changed",
          "leaf": leaf(domain, distribution, wallet, int(first["amount"]) + 1, 0).hex(),
@@ -196,9 +216,7 @@ def vectors():
         {"why": "proof from another list",
          "leaf": first["leaf"], "proof": other_case["entries"][0]["proof"],
          "root": base["root"]},
-        {"why": "proof longer than the maximum",
-         "leaf": first["leaf"], "proof": first["proof"] + [first["leaf"]] * MAX_PROOF_LEN,
-         "root": base["root"]},
+        over_limit,
     ]
     for bad in must_fail:
         assert not verify([bytes.fromhex(p) for p in bad["proof"]],
@@ -212,6 +230,8 @@ def vectors():
         "domains": DOMAINS,
         "cases": cases,
         "must_fail": must_fail,
+        "at_limit": at_limit,
+        "over_limit": over_limit,
     }
 
 

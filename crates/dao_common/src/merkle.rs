@@ -315,6 +315,27 @@ mod tests {
     }
 
     #[test]
+    fn length_limit_vectors() {
+        let v = vectors();
+        let long = &v["over_limit"];
+        assert!(v["must_fail"].as_array().expect("must_fail").contains(long));
+        for (case, len, accepted) in [
+            (&v["at_limit"], MAX_PROOF_LEN, true),
+            (long, MAX_PROOF_LEN + 1, false),
+        ] {
+            let p = proof(&case["proof"]);
+            let candidate = hex32(case["leaf"].as_str().expect("leaf"));
+            let root = hex32(case["root"].as_str().expect("root"));
+            assert_eq!(p.len(), len);
+            // The root is the one the proof leads to, so only the length
+            // check can reject the longer proof.
+            let folded = p.iter().fold(candidate, |h, s| node(&h, s));
+            assert_eq!(folded, root);
+            assert_eq!(verify_proof(&p, &root, candidate), accepted);
+        }
+    }
+
+    #[test]
     fn node_is_order_independent() {
         let a = [1u8; 32];
         let b = [2u8; 32];

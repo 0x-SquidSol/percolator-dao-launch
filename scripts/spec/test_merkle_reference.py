@@ -102,13 +102,31 @@ class TreeTest(unittest.TestCase):
 
     def test_proof_length_limit(self):
         h = m.leaf(DOMAIN, DIST, wallet(1), 5, 0)
-        self.assertFalse(m.verify([h] * (m.MAX_PROOF_LEN + 1), h, h))
+        siblings = [wallet(n) for n in range(m.MAX_PROOF_LEN + 1)]
+        full, long = siblings[:m.MAX_PROOF_LEN], siblings
+        self.assertTrue(m.verify(full, m.fold(full, h), h))
+        # Would verify if the length were not checked.
+        self.assertFalse(m.verify(long, m.fold(long, h), h))
 
 
 class VectorsTest(unittest.TestCase):
     def setUp(self):
         with open(m.VECTORS_PATH, encoding="utf-8") as handle:
             self.vectors = json.load(handle)
+
+    def test_length_limit_vectors(self):
+        ok = self.vectors["at_limit"]
+        bad = self.vectors["over_limit"]
+        self.assertIn(bad, self.vectors["must_fail"])
+        self.assertEqual(len(ok["proof"]), m.MAX_PROOF_LEN)
+        self.assertEqual(len(bad["proof"]), m.MAX_PROOF_LEN + 1)
+        for v in (ok, bad):
+            proof = [bytes.fromhex(p) for p in v["proof"]]
+            self.assertEqual(m.fold(proof, bytes.fromhex(v["leaf"])).hex(), v["root"])
+        self.assertTrue(m.verify([bytes.fromhex(p) for p in ok["proof"]],
+                                 bytes.fromhex(ok["root"]), bytes.fromhex(ok["leaf"])))
+        self.assertFalse(m.verify([bytes.fromhex(p) for p in bad["proof"]],
+                                  bytes.fromhex(bad["root"]), bytes.fromhex(bad["leaf"])))
 
     def test_committed_vectors_are_current(self):
         with open(m.VECTORS_PATH, encoding="utf-8", newline="") as handle:

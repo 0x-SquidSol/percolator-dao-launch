@@ -106,7 +106,9 @@ independent reference implementation in
 and checked in CI to be up to date. Each case lists its entries, leaf
 hashes, root and every proof, plus cases that must fail: a changed amount
 or index, the same entry under another domain or distribution, a proof from
-another list, and a proof over the length limit.
+another list, and a proof one step over the length limit with the root it
+leads to, so only the length check rejects it (also stored as
+`over_limit`). `at_limit` is a proof of exactly the limit that must verify.
 
 The proof check alone would accept an internal node presented as a leaf;
 that attack is stopped by programs always recomputing the leaf from the
