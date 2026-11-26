@@ -1,9 +1,11 @@
 //! Differential test between the Rust verifier and the TypeScript claim-list
-//! code (scripts/lib/merkle.ts). Run by CI through
-//! scripts/merkle-differential.ts; not part of the normal test run:
+//! code (`scripts/lib/merkle.ts`). Run by CI through
+//! `scripts/merkle-differential.ts`; not part of the normal test run:
 //!
-//!   DIFF_IN=<typescript lists.json> DIFF_OUT=<rust lists.json> DIFF_SEED=<n> \
-//!     cargo test -p dao_common --test merkle_differential -- --ignored
+//! ```text
+//! DIFF_IN=<typescript lists.json> DIFF_OUT=<rust lists.json> DIFF_SEED=<n> \
+//!   cargo test -p dao_common --test merkle_differential -- --ignored
+//! ```
 //!
 //! Rust rebuilds every TypeScript list and must get the same root and
 //! proofs, and accept every proof. It then writes its own random lists for
@@ -33,7 +35,7 @@ fn build(
         .iter()
         .map(|(wallet, amount, index)| leaf(domain, distribution, wallet, *amount, *index))
         .collect();
-    leaves.sort();
+    leaves.sort_unstable();
     let mut proofs: HashMap<Hash, Vec<Hash>> = leaves.iter().map(|l| (*l, Vec::new())).collect();
     let mut level: Vec<(Hash, Vec<Hash>)> = leaves.iter().map(|l| (*l, vec![*l])).collect();
     while level.len() > 1 {

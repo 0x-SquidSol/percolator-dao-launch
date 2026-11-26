@@ -50,10 +50,12 @@ export function leaf(
   amount: bigint,
   index: number,
 ): Buffer {
-  const tag = Buffer.from(domain, "ascii");
-  if (tag.length === 0 || tag.length > 255) {
+  // Checked before converting: Buffer.from(_, "ascii") keeps only the low
+  // byte of other characters, so a different string could give a real tag.
+  if (typeof domain !== "string" || !/^[\x00-\x7f]{1,255}$/.test(domain)) {
     throw new Error("domain must be 1-255 ASCII bytes");
   }
+  const tag = Buffer.from(domain, "ascii");
   if (amount <= 0n || amount > U64_MAX) {
     throw new Error("amount must be a non-zero u64");
   }

@@ -100,6 +100,11 @@ describe("claim-list format (TypeScript)", function () {
       /duplicate/,
     );
     assert.throws(() => leaf(d, dist, w, 0n, 0), /non-zero u64/);
+    // Its low bytes spell the real domain, so it must not be accepted.
+    assert.throws(() => leaf(d.split("/").join("į"), dist, w, 1n, 0), /ASCII/);
+    assert.throws(() => leaf("", dist, w, 1n, 0), /ASCII/);
+    assert.throws(() => leaf("x".repeat(256), dist, w, 1n, 0), /ASCII/);
+    assert.lengthOf(leaf("x".repeat(255), dist, w, 1n, 0), 32);
     assert.throws(() => leaf(d, dist, w, 1n << 64n, 0), /non-zero u64/);
     assert.throws(() => leaf(d, dist, w, 1n, 2 ** 32), /u32/);
     assert.throws(() => leaf(d, dist, w, 1n, -1), /u32/);

@@ -49,9 +49,12 @@ class LeafEncodingTest(unittest.TestCase):
                      (DOMAIN, DIST, wallet(1), 2**64, 0),
                      (DOMAIN, DIST, wallet(1), 1, 2**32),
                      (DOMAIN, DIST, wallet(1), 1, -1),
-                     ("", DIST, wallet(1), 1, 0)]:
+                     ("", DIST, wallet(1), 1, 0),
+                     ("x" * 256, DIST, wallet(1), 1, 0),
+                     (DOMAIN.replace("/", "į"), DIST, wallet(1), 1, 0)]:
             with self.assertRaises(ValueError):
                 m.leaf(*args)
+        self.assertEqual(len(m.leaf("x" * 255, DIST, wallet(1), 1, 0)), 32)
 
 
 class TreeTest(unittest.TestCase):

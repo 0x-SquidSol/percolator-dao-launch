@@ -95,13 +95,24 @@ The full list is in [docs/plan.md §19](docs/plan.md#19-open-items).
 ## Repository layout
 
 ```
-docs/          Working plan and research record
+.githooks/     Git hooks: leak, provenance and secret checks (setup: scripts/README.md)
+.github/       CI workflows
+crates/        Shared Rust code (claim-list check, fixed durations)
+docs/          Working plan, research record and specifications (docs/spec/)
+programs/      On-chain programs (only a README for now)
+scripts/       Leak and license guards, spec reference code, test helpers
+tests/         TypeScript tests and their helpers
+NOTICE         Copyright, license status, trademarks
+PROVENANCE.md  Where outside code comes from
+SECURITY.md    How to report problems
 README.md      This file: current direction and status
 ```
 
-As the experiment progresses, folders may be added for specifications,
-on-chain programs, tests, a client library, scripts, data tooling and a web
-app. Each will carry its own experimental notice.
+Other top-level files are build and tool settings.
+
+As the experiment progresses, more folders may be added, such as a client
+library, data tooling and a web app. Each will carry its own experimental
+notice.
 
 ## Disclaimers
 

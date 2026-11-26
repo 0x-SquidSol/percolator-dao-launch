@@ -166,6 +166,11 @@ fn verify_proof(proof: &[[u8; 32]], root: &[u8; 32], leaf: [u8; 32]) -> bool {
 /// on the list with `root`. `distribution` must come from the account being
 /// claimed against and `wallet` from the signer.
 ///
+/// # Errors
+///
+/// [`ClaimError::ProofTooLong`] if `proof` has more than [`MAX_PROOF_LEN`]
+/// steps, otherwise [`ClaimError::NotOnList`] if it does not lead to `root`.
+///
 /// Returns an error rather than a bool, so the natural call is
 /// `verify_claim(..)?`, which stops the instruction when the check fails and
 /// leaves no `if` to get the wrong way round. Ignoring the result fails to
