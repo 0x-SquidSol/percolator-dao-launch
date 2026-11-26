@@ -19,10 +19,12 @@ skipped, and any git error stops the guard.
 Git stand-ins (`git replace`) change what git shows but not what a push
 sends, so they are switched off for every git process the guards start.
 """
+import base64
 import os
 import re
 import subprocess
 import sys
+import tempfile
 from typing import List, NamedTuple, Optional, Tuple
 
 import textscan
@@ -282,25 +284,123 @@ def parse_tag(sha, raw) -> Tuple[Tag, str]:
     return Tag(sha, raw, taggers), target.group(1).decode("ascii")
 
 
-# A standard signature block (as in a signed tag's message, or a commit's
-# gpgsig header once unfolded): begin and end markers with only armor
-# headers and base64 lines between them.
-SIGNATURE_BLOCK = re.compile(
-    rb"-----BEGIN (?P<kind>PGP|SSH) SIGNATURE-----\r?\n"
-    rb"(?P<armor>(?:[A-Za-z][A-Za-z-]*: [^\r\n]*\r?\n)*)"  # Version:, Comment:, ...
-    rb"(?:\r?\n)?"
-    rb"(?:[A-Za-z0-9+/=]*\r?\n)*"                         # base64 only
-    rb"-----END (?P=kind) SIGNATURE-----\r?\n?"
+# Signatures are checked like any other text. Their data is random, so a
+# short private pattern could match it by chance. Such a match is excused
+# only for a genuine signature by one of these keys (see genuine_signature):
+# only the key holder can make one, and its data can't be chosen. Public by nature: an SSH signature embeds its
+# key, so each key is already in every commit it signed. A new signing key
+# goes here before (or in) the first commit it signs; never remove a key
+# that signed published history.
+SIGNING_KEYS = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDjtA7WaoM8MF+HWm6+cLPaRCfgnIxVdEC8UlU3N2Wuz",
 )
+SIGNATURE_NAMESPACE = "git"  # what git signs commits and tags under
+_ED25519_ORDER = 2**252 + 27742317777372353535851937790883648493  # L
+_SSH_BEGIN = b"-----BEGIN SSH SIGNATURE-----"
+_SSH_END = b"-----END SSH SIGNATURE-----"
+# Lines git takes as the start of a tag's signature (gpg-interface.c).
+_SIGNATURE_STARTS = (b"-----BEGIN PGP SIGNATURE-----", b"-----BEGIN PGP MESSAGE-----",
+                     b"-----BEGIN SIGNED MESSAGE-----", _SSH_BEGIN)
 
 
-def without_signature(raw):
-    """raw with the random base64 of well-formed signature blocks removed,
-    since it could match a short private pattern by chance. The armor
-    header lines (Comment:, Version:, ...) are free text, so they are kept
-    and checked. A block holding anything else isn't matched at all, so it
-    is still checked in full."""
-    return SIGNATURE_BLOCK.sub(lambda block: block.group("armor"), raw)
+def _ssh_strings(data, pos, count):
+    """`count` length-prefixed SSH wire strings from data[pos:], and the
+    position after them; (None, pos) if they don't fit."""
+    out = []
+    for _ in range(count):
+        size = int.from_bytes(data[pos:pos + 4], "big")
+        if pos + 4 > len(data) or pos + 4 + size > len(data):
+            return None, pos
+        out.append(data[pos + 4:pos + 4 + size])
+        pos += 4 + size
+    return out, pos
+
+
+def _pinned_ssh_signature(armored):
+    """Whether armored is byte for byte what ssh-keygen writes for an
+    ed25519 signature by a pinned key under the git namespace. ssh-keygen
+    itself accepts more (rewrapped lines, text after the end line, any
+    reserved field), and none of that is signed, so it could hide text."""
+    lines = armored.split(b"\n")
+    if len(lines) < 4 or lines[0] != _SSH_BEGIN or lines[-2:] != [_SSH_END, b""]:
+        return False
+    try:
+        blob = base64.b64decode(b"".join(lines[1:-2]), validate=True)
+    except ValueError:
+        return False
+    encoded = base64.b64encode(blob)
+    if lines[1:-2] != [encoded[i:i + 70] for i in range(0, len(encoded), 70)]:
+        return False
+    fields, end = _ssh_strings(blob, 10, 5)
+    if blob[:10] != b"SSHSIG\0\0\0\1" or fields is None or end != len(blob):
+        return False
+    key, namespace, reserved, hash_name, signature = fields
+    inner, inner_end = _ssh_strings(signature, 0, 2)
+    pinned = {base64.b64decode(k.split()[1]) for k in SIGNING_KEYS}
+    return (key in pinned and namespace == SIGNATURE_NAMESPACE.encode()
+            and reserved == b"" and hash_name in (b"sha256", b"sha512")
+            and inner is not None and inner_end == len(signature)
+            and inner[0] == b"ssh-ed25519" and len(inner[1]) == 64
+            # Canonical: verifiers also accept S + L, a second encoding of
+            # the same signature that ssh-keygen never writes.
+            and int.from_bytes(inner[1][32:], "little") < _ED25519_ORDER)
+
+
+def genuine_signature(payload, armored):
+    """Whether armored is a pinned key's signature of payload, in the exact
+    form ssh-keygen writes, checked by `ssh-keygen -Y verify` against the
+    pinned keys only. Any doubt (no ssh-keygen, one inside the repository,
+    an error or a timeout) is False, so the signature is checked in full."""
+    if not SIGNING_KEYS or not _pinned_ssh_signature(armored):
+        return False
+    keygen = program("ssh-keygen")
+    if keygen is None:
+        return False
+    try:
+        top = _enclosing_repository()
+        if in_current_folder(os.path.dirname(keygen), top) or in_current_folder(keygen, top):
+            return False
+        with tempfile.TemporaryDirectory() as folder:
+            signers = os.path.join(folder, "signers")
+            signature = os.path.join(folder, "signature")
+            with open(signers, "wb") as handle:
+                for key in SIGNING_KEYS:
+                    handle.write(f'guard namespaces="{SIGNATURE_NAMESPACE}" {key}\n'.encode("ascii"))
+            with open(signature, "wb") as handle:
+                handle.write(armored)
+            result = subprocess.run(
+                [keygen, "-Y", "verify", "-f", signers, "-I", "guard",
+                 "-n", SIGNATURE_NAMESPACE, "-s", signature],
+                input=payload, capture_output=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
+
+
+def commit_payload(raw):
+    """What a commit's signature signs: the object without its gpgsig and
+    gpgsig-sha256 headers (and their continuation lines), as git builds it."""
+    head, separator, message = raw.partition(b"\n\n")
+    kept, dropping = [], False
+    for line in head.split(b"\n"):
+        if not line.startswith(b" "):
+            dropping = line.startswith(b"gpgsig")
+        if not dropping:
+            kept.append(line)
+    return b"\n".join(kept) + separator + message
+
+
+def split_signed_tag(raw):
+    """A tag object split as git splits it: (payload, signature), the
+    signature running from the last line that starts one to the end (empty
+    if there is none). Earlier blocks are part of the message."""
+    start, pos = len(raw), 0
+    while pos < len(raw):
+        if raw.startswith(_SIGNATURE_STARTS, pos):
+            start = pos
+        newline = raw.find(b"\n", pos)
+        pos = len(raw) if newline < 0 else newline + 1
+    return raw[:start], raw[start:]
 
 
 def unfold(head) -> List[Tuple[bytes, bytes]]:
@@ -328,6 +428,9 @@ class Commit(NamedTuple):
     mergetags: List[bytes]              # embedded tag objects
     message: bytes
     encoding: Optional[str]             # declared by an `encoding` header
+    # Each gpgsig / gpgsig-sha256 value, with what it signs, or None where a
+    # chance match can't be excused (see parse_commit).
+    signatures: List[Tuple[Optional[bytes], bytes]]
 
 
 _HEX_ID = re.compile(rb"[0-9a-f]{40}|[0-9a-f]{64}")
@@ -339,17 +442,23 @@ IDENT = re.compile(rb"(?:([^<>\n]*) )?<([^<>\n]*)> \d+ [+-]\d{4}")
 def parse_commit(raw) -> Commit:
     """Splits a raw commit object into what the leak guard checks:
       - every header as text, except well-formed tree/parent ids (pure hex)
-        and well-formed signature blocks, which are random by nature;
+        and signatures, which are returned on their own;
       - each author/committer name and email (exactly one of each; git log
         only shows the first, so a second could hide an address);
       - each embedded tag (mergetag);
       - the message, and its declared text encoding (at most one).
+    A signature gets its signed payload only when it is the commit's one
+    signature header and the SHA-1 kind (`gpgsig`) that git verifies here;
+    git joins repeated headers, so none of several is ever excused.
     Refuses (exits) on anything that doesn't have the expected shape."""
     head, separator, message = raw.partition(b"\n\n")
     if not separator:
         sys.exit("guard: refusing, could not read a commit object")
-    text, idents, mergetags, encoding = [], [], [], None
+    text, idents, mergetags, encoding, signatures = [], [], [], None, []
+    sha1 = False
     for key, value in unfold(head):
+        if key == b"tree":
+            sha1 = len(value) == 40
         if key in (b"tree", b"parent") and _HEX_ID.fullmatch(value):
             continue
         if key in (b"author", b"committer"):
@@ -359,7 +468,7 @@ def parse_commit(raw) -> Commit:
             idents.append((key.decode("ascii"), ident.group(1) or b"", ident.group(2)))
             continue
         if key in (b"gpgsig", b"gpgsig-sha256"):
-            text.append(without_signature(value + b"\n"))
+            signatures.append((key, value + b"\n"))
             continue
         if key == b"mergetag":
             mergetags.append(value + b"\n")
@@ -373,7 +482,10 @@ def parse_commit(raw) -> Commit:
     roles = sorted(role for role, _, _ in idents)
     if roles != ["author", "committer"]:
         sys.exit("guard: refusing, a commit needs exactly one author and one committer")
-    return Commit(b"\n".join(text), idents, mergetags, message, encoding)
+    excusable = sha1 and len(signatures) == 1 and signatures[0][0] == b"gpgsig"
+    payload = commit_payload(raw) if excusable else None
+    return Commit(b"\n".join(text), idents, mergetags, message, encoding,
+                  [(payload, armored) for _, armored in signatures])
 
 
 class Blobs:

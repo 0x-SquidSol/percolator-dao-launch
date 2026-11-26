@@ -36,7 +36,28 @@ before; large non-text files take longer (about two seconds per MB). Not
 inspected yet: compressed or encoded content, such as zip-based formats, PDF
 streams and base64.
 
-They run in three places:
+A commit's message, author and committer are also read in the text
+encoding the commit declares: at commit time the one `i18n.commitEncoding`
+sets, at push time the commit's `encoding` header.
+
+Commit and tag signatures are checked like any other text. Signature data
+is random, so a short private pattern could match it by chance. That match
+is excused only for a genuine signature, in exactly the form `ssh-keygen`
+writes, by a key listed in `guards/gitfiles.py` (`SIGNING_KEYS`), checked
+with `ssh-keygen -Y verify`. Anything else is checked in full, so a made-up signature can't
+hide text: PGP signatures, keys other than ed25519 (RSA, ECDSA, security
+keys), and every signature when `ssh-keygen` isn't installed. In practice:
+- a new signing key must be added to `SIGNING_KEYS` before its commits are
+  pushed; if a commit by an unlisted key is refused for a signature match,
+  change the commit (for example `git commit --amend --no-edit`, which gives
+  it a new date) so it gets a new signature;
+- merge and edit locally. Commits GitHub creates itself (web merges and
+  edits, "Update branch", Dependabot) carry GitHub's PGP signature, which is
+  never excused, and once pushed they can't be re-signed;
+- when merging a signed tag, edit the merge message: git otherwise copies
+  the tag's signature into it as `#` lines, which are checked as text.
+
+The guards run in three places:
 - **on every commit** (pre-commit and commit-msg hooks);
 - **before every push** (pre-push hook): ref names, plus every commit being
   pushed, including its file names and contents, so a leak added and then

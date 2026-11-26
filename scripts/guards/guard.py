@@ -180,11 +180,40 @@ def check_ident(label, name, email, patterns, problems):
     check_email(label, email.decode("utf-8", errors="replace"), problems)
 
 
+def check_declared(label, data, encoding, patterns, problems):
+    """data also read in the text encoding a commit declares (or git is set
+    to declare), which the usual views may not cover. An unknown encoding,
+    or a codec that isn't text (rot13, base64, hex), is refused."""
+    try:
+        if not getattr(codecs.lookup(encoding), "_is_text_encoding", True):
+            raise LookupError(encoding)
+        declared = data.decode(encoding, errors="replace")
+    except (LookupError, UnicodeError, ValueError):
+        problems.append(f"{label}: unknown text encoding, refused")
+        return
+    check_text(f"{label} (declared encoding)", declared.encode("utf-8"), patterns, problems)
+
+
+def check_signature(label, payload, armored, patterns, problems):
+    """A signature, checked like any text. Its data is random, so a short
+    pattern can match it by chance; that is excused only when it is a
+    genuine signature of payload by a pinned key (gitfiles.SIGNING_KEYS).
+    payload is None where no excuse applies."""
+    found = []
+    check_text(label, armored, patterns, found)
+    if found and not (payload is not None and gitfiles.genuine_signature(payload, armored)):
+        problems.extend(found)
+
+
 def check_tag(label, tag, patterns, problems):
     """One annotated tag object, pushed or embedded in a merge commit: the
-    whole object as text (without a well-formed signature) and every tagger
-    email. Labels never use the tag's name, which could match a pattern."""
-    check_text(label, gitfiles.without_signature(tag.raw), patterns, problems)
+    object as text, its signature (split off as git does, see
+    check_signature) and every tagger email. Labels never use the tag's
+    name, which could match a pattern."""
+    payload, signature = gitfiles.split_signed_tag(tag.raw)
+    check_text(label, payload, patterns, problems)
+    if signature:
+        check_signature(f"{label} signature", payload, signature, patterns, problems)
     if not tag.taggers:
         problems.append(f"{label}: has no tagger")
     for email in tag.taggers:
@@ -200,6 +229,8 @@ def check_commit(short, raw, patterns, problems):
     label = f"commit {short}"
     commit = gitfiles.parse_commit(raw)
     check_text(f"{label} headers", commit.text, patterns, problems)
+    for number, (payload, armored) in enumerate(commit.signatures, 1):
+        check_signature(f"{label} signature {number}", payload, armored, patterns, problems)
     for role, name, email in commit.idents:
         check_ident(f"{label} {role}", name, email, patterns, problems)
     for number, embedded in enumerate(commit.mergetags, 1):
@@ -211,16 +242,7 @@ def check_commit(short, raw, patterns, problems):
         # Also read the names, emails and message in the encoding the
         # commit declares.
         names = b"\n".join(part for _, name, email in commit.idents for part in (name, email))
-        try:
-            # Only real text encodings: codecs.lookup also accepts rot13,
-            # base64, hex, which can't decode bytes to text.
-            if not getattr(codecs.lookup(commit.encoding), "_is_text_encoding", True):
-                raise LookupError(commit.encoding)
-            declared = (names + b"\n" + commit.message).decode(commit.encoding, errors="replace")
-        except (LookupError, UnicodeError, ValueError):
-            problems.append(f"{label}: unknown text encoding, refused")
-            return
-        check_text(f"{label} (declared encoding)", declared.encode("utf-8"), patterns, problems)
+        check_declared(label, names + b"\n" + commit.message, commit.encoding, patterns, problems)
 
 
 def check_entries(prefix, listing, patterns, problems, blobs):
@@ -240,10 +262,23 @@ def check_entries(prefix, listing, patterns, problems, blobs):
             check_text(label, data, patterns, problems)
 
 
+def commit_encoding():
+    """The i18n.commitEncoding git will declare in the commit's `encoding`
+    header (-c values included), or None if it is not set."""
+    result = subprocess.run([gitfiles.git_exe(), "config", "-z", "--get", "i18n.commitEncoding"],
+                            capture_output=True)
+    if result.returncode == 1:
+        return None
+    if result.returncode != 0 or not result.stdout.endswith(b"\0"):
+        sys.exit("guard: refusing, 'git config' failed (fetch or check the repository)")
+    return result.stdout[:-1].decode("ascii", errors="replace")
+
+
 def mode_staged(patterns):
     problems = []
     with gitfiles.Blobs() as blobs:
         check_entries("", gitfiles.staged(), patterns, problems, blobs)
+    parts = []
     for role, variable in (("author", "GIT_AUTHOR_IDENT"), ("committer", "GIT_COMMITTER_IDENT")):
         # The configured identity is what goes into the commit (it reflects
         # --author), read with the same strict parse as pushed commits.
@@ -251,7 +286,13 @@ def mode_staged(patterns):
         if ident is None:
             problems.append(f"{role}: could not read the configured identity, refused")
             continue
-        check_ident(role, ident.group(1) or b"", ident.group(2), patterns, problems)
+        name, email = ident.group(1) or b"", ident.group(2)
+        check_ident(role, name, email, patterns, problems)
+        parts += [name, email]
+    encoding = commit_encoding()
+    if encoding is not None:
+        # Also in the encoding the commit will declare (as for pushed commits).
+        check_declared("author and committer", b"\n".join(parts), encoding, patterns, problems)
     return problems
 
 
@@ -262,6 +303,11 @@ def mode_message(patterns, message_file):
     # The whole message, comment lines included (git keeps "#" lines in some
     # cleanup modes), as raw bytes so every encoding view applies.
     check_text("commit message", raw, patterns, problems)
+    # git stores the message bytes as written and declares this encoding
+    # for them, so read them in it too (the pushed-commit check does).
+    encoding = commit_encoding()
+    if encoding is not None:
+        check_declared("commit message", raw, encoding, patterns, problems)
     branch = git("symbolic-ref", "--short", "-q", "HEAD", check=False).decode().strip()
     if branch:
         check_name("branch name", branch, patterns, problems)

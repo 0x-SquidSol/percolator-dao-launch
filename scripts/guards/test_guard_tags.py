@@ -119,7 +119,7 @@ class TagObjectTest(unittest.TestCase):
         self.assertNotIn("zzprivatename", result.stderr)
 
     # Only base64 characters, but containing "ZZ42", which the pattern used
-    # in the false-positive test below matches.
+    # in the chance-match test below matches.
     SIG_BASE64 = "iQEzBAABCAAdFiEE+ZZ42/aa+Qx/bb==\nZZ42+x/y\n=AbCd\n"
 
     def signed_tag(self, signature_body):
@@ -129,14 +129,34 @@ class TagObjectTest(unittest.TestCase):
                 "-----END PGP SIGNATURE-----\n")
         return self.git("hash-object", "-t", "tag", "-w", "--stdin", "--literally", data=body.encode())
 
-    def test_signature_base64_does_not_cause_false_positive(self):
-        # Base64 that happens to contain a pattern must not block a clean tag.
+    def test_match_in_unverified_signature_blocked(self):
+        # Signature data is checked like any text. A chance match is excused
+        # only for a genuine signature by a pinned key (see
+        # test_guard_signatures.py), never for a made-up one like this.
         self.env["GUARD_PATTERNS"] = "\\bZZ\\d{2}\\b\n"
-        sha = self.signed_tag(self.SIG_BASE64)
+        self.assert_blocked(self.signed_tag(self.SIG_BASE64), "signature")
+
+    def test_clean_signed_tag_allowed(self):
+        sha = self.signed_tag("iQEzBAABCAAdFiEE+Qx/bb==\n=AbCd\n")
         self.assertEqual(self.pre_push(sha).returncode, 0, self.pre_push(sha).stderr)
-        # Control: the same base64 outside a signature block is caught.
-        unsigned = self.tag(self.head, message="notes +ZZ42/")
-        self.assertNotEqual(self.pre_push(unsigned).returncode, 0)
+
+    def test_block_before_the_signature_is_message_text(self):
+        # git takes only the last block as the signature, so an earlier one
+        # is message text, made with a plain `git tag -a -F`.
+        self.env["GUARD_PATTERNS"] = "ZZTEST\\d{2}\n"
+        body = (f"object {self.head}\ntype commit\ntag v1\n"
+                f"tagger Test <{GOOD_EMAIL}> 0 +0000\n\nrelease\n"
+                "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQ\nZZTEST42\n"
+                "-----END SSH SIGNATURE-----\n"
+                "-----BEGIN PGP SIGNATURE-----\n\niQEzBAABCAAd==\n=AbCd\n"
+                "-----END PGP SIGNATURE-----\n")
+        sha = self.git("hash-object", "-t", "tag", "-w", "--stdin", data=body.encode())
+        result = self.pre_push(sha)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("private pattern", result.stderr)
+        self.assertNotIn("signature", result.stderr)  # found in the message
+        # The same word in the last block is in the signature: caught too.
+        self.assert_blocked(self.signed_tag("ZZTEST42\n=AbCd\n"), "signature")
 
     def test_text_hidden_inside_signature_block_still_blocked(self):
         # Anything that isn't base64 inside the block keeps it from being

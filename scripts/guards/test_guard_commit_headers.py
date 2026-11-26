@@ -86,13 +86,38 @@ class CommitHeaderTest(unittest.TestCase):
         self.assert_blocked(self.commit(extra="x-note ZZTEST-42\n"), "private pattern")
 
     def test_clean_signed_commit_allowed(self):
-        # Signature base64 that happens to contain a short pattern must not
-        # block a clean commit (same rule as signed tags).
-        self.env["GUARD_PATTERNS"] = "\\bZZ\\d{2}\\b\n"
         gpgsig = ("gpgsig -----BEGIN PGP SIGNATURE-----\n \n"
-                  " iQEzBAABCAAdFiEE+ZZ42/aa+Qx/bb==\n =AbCd\n"
+                  " iQEzBAABCAAdFiEE+Qx/bb==\n =AbCd\n"
                   " -----END PGP SIGNATURE-----\n")
         self.assert_allowed(self.commit(extra=gpgsig))
+
+    def test_match_in_unverified_signature_blocked(self):
+        # Signature data is checked like any text. A chance match is excused
+        # only for a genuine signature by a pinned key (see
+        # test_guard_signatures.py), never for a made-up block.
+        self.env["GUARD_PATTERNS"] = "\\bZZ\\d{2}\\b\nZZTEST\\d{2}\n"
+        for kind, data in (("PGP", " iQEzBAABCAAdFiEE+ZZ42/aa+Qx/bb==\n =AbCd\n"),
+                           ("SSH", " U1NIU0lHAAAAAQ\n ZZTEST12\n")):
+            with self.subTest(kind=kind):
+                gpgsig = (f"gpgsig -----BEGIN {kind} SIGNATURE-----\n{data}"
+                          f" -----END {kind} SIGNATURE-----\n")
+                self.assert_blocked(self.commit(extra=gpgsig), "signature 1")
+
+    def test_capitalised_encoding_is_a_plain_header(self):
+        # git's header names are case-sensitive: `Encoding` declares nothing,
+        # so it is neither read as an encoding nor counted as a second one,
+        # and its value is checked as header text.
+        idents = f"author Test <{GOOD}> 0 +0000\ncommitter Test <{GOOD}> 0 +0000\n".encode()
+        self.assert_allowed(self.raw_commit(idents + b"Encoding no-such-codec\nencoding UTF-8\n"))
+        self.assert_blocked(self.raw_commit(idents + b"Encoding ZZTEST-42\n"), "headers")
+
+    def test_second_encoding_after_signature_refused(self):
+        # A multi-line gpgsig header between the two doesn't hide the second.
+        lines = (f"author Test <{GOOD}> 0 +0000\ncommitter Test <{GOOD}> 0 +0000\n"
+                 "encoding UTF-8\ngpgsig -----BEGIN SSH SIGNATURE-----\n U1NIU0lHAAAAAQ\n"
+                 " -----END SSH SIGNATURE-----\nencoding utf-7\n").encode()
+        self.assert_refused(self.raw_commit(lines, b"+AFoAWgBUAEUAUwBUAC0ANAAy-"),
+                            "more than one encoding")
 
     def raw_commit(self, header_lines, message=b"docs: ok"):
         body = (f"tree {self.tree}\nparent {self.parent}\n".encode()

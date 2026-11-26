@@ -128,6 +128,33 @@ class GuardTest(unittest.TestCase):
         path = self.write("msg.txt", "feat: add thing (ZZTEST-04)\n")
         self.assertBlocked(self.guard("message", path))
 
+    def test_message_read_in_configured_encoding(self):
+        # git stores the message bytes as written and declares
+        # i18n.commitEncoding for them; in EBCDIC no usual view reads them.
+        path = os.path.join(self.dir, "msg.txt")
+        with open(path, "wb") as handle:
+            handle.write("feat: add thing (ZZTEST-04)\n".encode("cp500"))
+        self.assertAllowed(self.guard("message", path))
+        self.git("config", "i18n.commitEncoding", "cp500")
+        result = self.guard("message", path)
+        self.assertBlocked(result)
+        self.assertIn("declared encoding", result.stderr)
+        self.git("config", "i18n.commitEncoding", "no-such-codec")
+        result = self.guard("message", self.write("ok.txt", "feat: add thing\n"))
+        self.assertBlocked(result)
+        self.assertIn("unknown text encoding", result.stderr)
+
+    def test_identity_read_in_configured_encoding(self):
+        # Written as raw bytes, so the name is exactly what git stores.
+        with open(os.path.join(self.dir, ".git", "config"), "ab") as handle:
+            handle.write(b"[user]\n\tname = " + "Dev ZZTEST-04".encode("cp500") + b"\n")
+        self.stage("src/lib.rs", "pub fn hello() {}\n")
+        self.assertAllowed(self.guard("staged"))
+        self.git("config", "i18n.commitEncoding", "cp500")
+        result = self.guard("staged")
+        self.assertBlocked(result)
+        self.assertIn("declared encoding", result.stderr)
+
     def test_private_pattern_in_branch_blocked(self):
         self.git("checkout", "-q", "-b", "work-zztest-07")
         path = self.write("msg.txt", "feat: add thing\n")
