@@ -12,13 +12,15 @@ when code or config contains:
 Every file is checked, in every readable view (see textscan.py), so text in
 UTF-16, other encodings or binary files is checked too. Matching is per line.
 
-Docs may discuss the license: the loose phrases "Business Source License
-1.1" and "Additional Use Grant" are allowed only in the exact files in
-LICENSE_DISCUSSION, and only in their plain UTF-8 view. Wording that only a
-real copy of the license contains (its title alone on a line, its parameter
-lines, its MariaDB copyright line, BUSL-1.1, "Licensor: MetaDAO") and every
-address and npm marker are checked in every file, with no exceptions. This
-file and its tests are skipped by exact path because they hold the markers.
+Docs may discuss the license: loose mentions of its name and of its
+extra-use grant are allowed only in the exact files in LICENSE_DISCUSSION,
+and only in their plain UTF-8 view. Wording that only a real copy of the
+license contains (its title alone on a line, its parameter lines, its
+MariaDB copyright line, its SPDX identifier, its licensor line naming
+MetaDAO) and every address and npm marker are checked in every file, with
+no exceptions. That includes this file and its tests: they never spell a
+marker out in one piece, and a test checks it. The only exception is
+history: `commits` skips the exact earlier versions listed in HISTORICAL.
 
 It is a tripwire, not proof of clean authorship: a phrase split across two
 lines, or reworded, is not caught.
@@ -83,46 +85,70 @@ MARKERS = [
     ("BSL license text", re.compile(r"^[\s#>*_]*Business\s+Source\s+License\s+1\.1[\s*_]*$", re.I), False),
     # Parameter lines whose names appear in little but the BSL itself.
     # ("Change Date" and a bare "Licensor" are left out: changelogs and
-    # other licenses use them. "Licensor: MetaDAO" has its own marker.)
+    # other licenses use them. The licensor line naming MetaDAO has its own marker.)
     ("BSL license text", re.compile(
         r"^[\s>*_|-]*(Licensed\s+Work|Additional\s+Use\s+Grant|Change\s+License)"
         r"[\s*_]*[:|]", re.I), False),
     # Loose mentions: allowed only where the license is discussed.
     ("BSL license text", re.compile(r"Business\s+Source\s+License\s+1\.1", re.I), True),
     ("BSL license text", re.compile(r"Additional\s+Use\s+Grant", re.I), True),
-    ("MetaDAO npm package", re.compile(r"@metadaoproject/", re.I), False),
+    ("MetaDAO npm package", re.compile(r"@metadaoproject[/]", re.I), False),
 ]
 
 # Program IDs and hard-coded admin keys from MetaDAO's BSL-era programs
 # (develop branch, checked 2026-11-19). Third-party addresses those programs
 # also use (USDC, Meteora, Squads, ...) are deliberately not listed.
+# Each is written in two pieces after its first four characters (Python joins
+# adjacent strings), so this file does not match itself.
 BSL_ADDRESSES = [
-    "FUTARELBfJfQ8RDGhg1wdhddq1odMAJUePHFuBYfUxKq",  # futarchy
-    "VLTX1ishMBbcX3rdBWGssxawAo1Q2X2qxYFYqiGodVg",  # conditional_vault v0.4
-    "moontUzsdepotRGe5xsfip7vLPTJnVuafqdUWexVnPM",  # launchpad v0.7
-    "MooNyh4CBUYEKyXVnjGYQ8mEiJDpGvJMdvrZx1iGeHV",  # launchpad
-    "moonDJUoHteKkGATejA5bdJVwJ6V6Dg74gyqyJTx73n",  # launchpad
-    "WALL8ucBuUyL46QYxwYJjidaFYhdvxUFrgvBxPshERx",  # bid_wall
-    "pbPPQH7jyKoSLu8QYs3rSY3YkDRXEBojKbTgnUg7NDS",  # price_based_performance_package
-    "pPV2pfrxnmstSb9j7kEeCLny5BGj6SNwCWGd6xbGGzz",  # performance_package_v2
-    "gvnr27cVeyW3AVf3acL7VCJ5WjGAphytnsgcK1feHyH",  # mint_governor
-    "LiQnowFbFQdYyZhF4pUbpsrZCjxRTQ1upKJxZ2VXjde",  # liquidation
-    "GaTEjZy6eMdHg2BcL8dk3iE78jkJ9sPtyw1q2tMNi8PA",  # gated_mint
-    "6awyHMshBGVjJ3ozdSJdyyDE1CTAXUwrpNMaRGMsb4sf",  # admin key
-    "CWGawadYU8CzRVBecnJymNw97H7E3ndDinV5sMzesgY2",  # admin key
-    "tSTp6B6kE9o6ZaTmHm2ZwnJBBtgd3x112tapxFhmBEQ",  # fee recipient
-    "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",  # fee recipient
-    "EP3SoC2SvR3d4c2eXVBvhEMWSr2j3YtoCY3UMiQV7BPD",  # DAO initializer key
+    "FUTA" "RELBfJfQ8RDGhg1wdhddq1odMAJUePHFuBYfUxKq",  # futarchy
+    "VLTX" "1ishMBbcX3rdBWGssxawAo1Q2X2qxYFYqiGodVg",  # conditional_vault v0.4
+    "moon" "tUzsdepotRGe5xsfip7vLPTJnVuafqdUWexVnPM",  # launchpad v0.7
+    "MooN" "yh4CBUYEKyXVnjGYQ8mEiJDpGvJMdvrZx1iGeHV",  # launchpad
+    "moon" "DJUoHteKkGATejA5bdJVwJ6V6Dg74gyqyJTx73n",  # launchpad
+    "WALL" "8ucBuUyL46QYxwYJjidaFYhdvxUFrgvBxPshERx",  # bid_wall
+    "pbPP" "QH7jyKoSLu8QYs3rSY3YkDRXEBojKbTgnUg7NDS",  # price_based_performance_package
+    "pPV2" "pfrxnmstSb9j7kEeCLny5BGj6SNwCWGd6xbGGzz",  # performance_package_v2
+    "gvnr" "27cVeyW3AVf3acL7VCJ5WjGAphytnsgcK1feHyH",  # mint_governor
+    "LiQn" "owFbFQdYyZhF4pUbpsrZCjxRTQ1upKJxZ2VXjde",  # liquidation
+    "GaTE" "jZy6eMdHg2BcL8dk3iE78jkJ9sPtyw1q2tMNi8PA",  # gated_mint
+    "6awy" "HMshBGVjJ3ozdSJdyyDE1CTAXUwrpNMaRGMsb4sf",  # admin key
+    "CWGa" "wadYU8CzRVBecnJymNw97H7E3ndDinV5sMzesgY2",  # admin key
+    "tSTp" "6B6kE9o6ZaTmHm2ZwnJBBtgd3x112tapxFhmBEQ",  # fee recipient
+    "HLnp" "Sz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",  # fee recipient
+    "EP3S" "oC2SvR3d4c2eXVBvhEMWSr2j3YtoCY3UMiQV7BPD",  # DAO initializer key
 ]
 for address in BSL_ADDRESSES:
     # Case-sensitive: base58 addresses differ by case.
     MARKERS.append(("MetaDAO BSL-era address", re.compile(re.escape(address)), False))
 
-# Exact paths only. These hold the markers themselves.
-SKIPPED = frozenset({
-    "scripts/guards/provenance.py",
-    "scripts/guards/test_provenance.py",
-    "scripts/guards/test_provenance_encodings.py",
+# Earlier versions of this file and its tests, which spelled the markers
+# out: (path, git blob ID) pairs. Only `commits` skips them, and only at the
+# same path, so old history can still be pushed. A blob ID is a hash of the
+# content, so any change is checked in full. Never add to this.
+HISTORICAL = frozenset({
+    ("scripts/guards/provenance.py",
+     "04ae6fdabd34243f12febeeecf564ef73dd64163"),
+    ("scripts/guards/provenance.py",
+     "1c0cc48a45e6372cee1026e2320bac9751def851"),
+    ("scripts/guards/provenance.py",
+     "6d7116e8565c307fb9716ddc65da953280ce373b"),
+    ("scripts/guards/provenance.py",
+     "817eb7f8bc70d307a32f385bcf7b4b704ff9a682"),
+    ("scripts/guards/provenance.py",
+     "8ba8891e2cfd56d5f5efb9f032e9b1b1852b8a22"),
+    ("scripts/guards/provenance.py",
+     "a2d441e31c14f0ca99cd10912c642ef66a77cf51"),
+    ("scripts/guards/provenance.py",
+     "f079d86f4117ca32eff2395a67c244fd3ad403db"),
+    ("scripts/guards/test_provenance.py",
+     "595ea60ee981e08c7c6041c24aa94c76aa2a6597"),
+    ("scripts/guards/test_provenance.py",
+     "a797238c55cfdc8bab6787a2f8379a52a2cf0d07"),
+    ("scripts/guards/test_provenance.py",
+     "e7c2326f6f8d6a5855d71d9fd4cfae162277d322"),
+    ("scripts/guards/test_provenance_encodings.py",
+     "8ef96adee5cd3117976463e964449f2e6ffb0528"),
 })
 
 # Exact paths of docs that discuss MetaDAO's license (loose mentions only).
@@ -150,7 +176,7 @@ def git(*args):
     return result.stdout
 
 
-def check_listing(prefix, listing, problems, blobs):
+def check_listing(prefix, listing, problems, blobs, historical=frozenset()):
     """Checks entries from gitfiles by their stored content, and reports
     every refusal (submodules, unmerged or unknown entries)."""
     entries, refusals = listing
@@ -159,7 +185,7 @@ def check_listing(prefix, listing, problems, blobs):
         # only the leak guard can hide (it reports the same refusal first).
         problems.append(f"{prefix}an entry was refused: {refusal.reason}")
     for entry in entries:
-        if entry.path in SKIPPED:
+        if (entry.path, entry.sha) in historical:
             continue
         data = blobs.read(entry.sha)
         found = []
@@ -175,12 +201,11 @@ def check_commits(rev_list_args, problems):
     commits = git("rev-list", *rev_list_args).decode("utf-8").split()
     with gitfiles.Blobs() as blobs:
         for commit in commits:
-            check_listing(f"{commit[:12]} ", gitfiles.in_commit(commit), problems, blobs)
+            check_listing(f"{commit[:12]} ", gitfiles.in_commit(commit), problems, blobs,
+                          HISTORICAL)
 
 
 def check(path, data, problems):
-    if path in SKIPPED:
-        return
     if len(data) > textscan.MAX_SCAN_BYTES:
         problems.append(f"{path}: too large to inspect (over 25 MB)")
         return

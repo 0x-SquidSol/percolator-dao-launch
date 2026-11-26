@@ -6,8 +6,8 @@ import unittest
 
 import test_provenance as base
 
-BSL_HEADER = "Business Source License 1.1\nLicensor: MetaDAO LLC\n"
-BSL_ADDRESS = 'declare_id!("FUTARELBfJfQ8RDGhg1wdhddq1odMAJUePHFuBYfUxKq");\n'
+BSL_HEADER = f"{base.BSL_TITLE}\n{base.LICENSOR}\n"
+BSL_ADDRESS = f'declare_id!("{base.FUTARCHY_ID}");\n'
 
 
 class ProvenanceEncodingTest(unittest.TestCase):
@@ -60,23 +60,23 @@ class ProvenanceEncodingTest(unittest.TestCase):
         self.assert_blocked_everywhere("LICENSE", BSL_HEADER.lower().encode())
 
     def test_lower_case_spdx_id_blocked(self):
-        self.assert_blocked_everywhere("programs/x/Cargo.toml", b'license = "busl-1.1"\n')
+        self.assert_blocked_everywhere("programs/x/Cargo.toml", f'license = "{base.SPDX.lower()}"\n'.encode())
 
     def test_upper_case_additional_use_grant_blocked(self):
-        self.assert_blocked_everywhere("programs/x/src/lib.rs", b"// ADDITIONAL USE GRANT: none\n")
+        self.assert_blocked_everywhere("programs/x/src/lib.rs", f"// {base.GRANT.upper()}: none\n".encode())
 
     # --- docs that discuss the license (docs/research.md only) ---
 
     def test_research_doc_loose_mentions_allowed(self):
         self.stage_bytes("docs/research.md", (
-            "### 5.1 Current MetaDAO code: Business Source License 1.1\n"
-            "- **Production use requires:** an Additional Use Grant from MetaDAO LLC (made\n"
+            f"### 5.1 Current MetaDAO code: {base.BSL_TITLE}\n"
+            f"- **Production use requires:** an {base.GRANT} from MetaDAO LLC (made\n"
         ).encode())
         for mode in ("staged", "tree"):
             self.assertEqual(self.run_guard(mode).returncode, 0, mode)
 
     def test_research_doc_license_title_line_blocked(self):
-        self.assert_blocked_everywhere("docs/research.md", b"notes\n\nBusiness Source License 1.1\n")
+        self.assert_blocked_everywhere("docs/research.md", f"notes\n\n{base.BSL_TITLE}\n".encode())
 
     def test_research_doc_parameter_line_blocked(self):
         self.assert_blocked_everywhere("docs/research.md", b"**Licensed Work:** MetaDAO Programs\n")
@@ -97,11 +97,11 @@ class ProvenanceEncodingTest(unittest.TestCase):
 
     def test_full_bsl_header_still_blocked(self):
         header = (
-            "Business Source License 1.1\n\n"
-            "License text copyright (c) 2017 MariaDB Corporation Ab, All Rights Reserved.\n\n"
-            "Licensor:             MetaDAO LLC\n"
+            f"{base.BSL_TITLE}\n\n"
+            f"License text copyright (c) 2017 {base.MARIADB} Ab, All Rights Reserved.\n\n"
+            f"Licensor:{' ' * 13}MetaDAO LLC\n"
             "Licensed Work:        MetaDAO Programs\n"
-            "Additional Use Grant: Any uses approved by MetaDAO LLC\n"
+            f"{base.GRANT}: Any uses approved by MetaDAO LLC\n"
             "Change Date:          4200-06-09\n"
             "Change License:       GNU Lesser General Public License v2.0 or later\n"
         )
@@ -113,25 +113,25 @@ class ProvenanceEncodingTest(unittest.TestCase):
             self.assertIn(f"docs/research.md:{line}:", result.stderr)
 
     def test_research_doc_mariadb_line_blocked(self):
-        self.assert_blocked_everywhere("docs/research.md", b"License text copyright (c) 2017 MariaDB Corporation Ab\n")
+        self.assert_blocked_everywhere("docs/research.md", f"License text copyright (c) 2017 {base.MARIADB} Ab\n".encode())
 
     def test_research_doc_licensor_metadao_blocked(self):
-        self.assert_blocked_everywhere("docs/research.md", b"The text names Licensor: MetaDAO LLC.\n")
+        self.assert_blocked_everywhere("docs/research.md", f"The text names {base.LICENSOR}.\n".encode())
 
     def test_research_doc_full_address_blocked(self):
         self.assert_blocked_everywhere("docs/research.md", BSL_ADDRESS.encode())
 
     def test_research_doc_npm_package_blocked(self):
-        self.assert_blocked_everywhere("docs/research.md", b"yarn add @metadaoproject/programs\n")
+        self.assert_blocked_everywhere("docs/research.md", f"yarn add {base.NPM}programs\n".encode())
 
     def test_research_doc_in_utf16_blocked(self):
         # The exception only applies to the plain UTF-8 reading.
-        data = "MetaDAO moved to the Business Source License 1.1.\n".encode("utf-16")
+        data = f"MetaDAO moved to the {base.BSL_TITLE}.\n".encode("utf-16")
         self.assert_blocked_everywhere("docs/research.md", data)
 
     def test_body_only_notice_md_blocked(self):
         body = ("Terms\n\nThe Licensor hereby grants you the right to copy, modify, create\n"
-                "derivative works. The Licensor may make an Additional Use Grant, above.\n")
+                f"derivative works. The Licensor may make an {base.GRANT}, above.\n")
         self.assert_blocked_everywhere("NOTICE.md", body.encode())
 
     def test_license_named_exception_refused(self):

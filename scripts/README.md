@@ -106,6 +106,13 @@ lines, its copyright line, its SPDX identifier, its licensor line) and
 every address and package name are refused in every file, with no
 exceptions. The exact markers are in `guards/provenance.py`.
 
+The guard's own files are checked too: they never write a marker out in one
+piece, and a self-test runs the guard over every file in `guards/`. The one
+exception is history: when checking commits, it skips the exact earlier
+versions of the guard and its tests that spelled markers out (listed in the
+guard by path and content), so old commits can still be pushed. Any change
+to them, or a copy elsewhere, is checked.
+
 It runs **on every commit** (pre-commit hook), **before every push** over
 each commit being pushed (including merges and rebases, which skip the
 pre-commit hook), and **in CI on every push**, over every tracked file and

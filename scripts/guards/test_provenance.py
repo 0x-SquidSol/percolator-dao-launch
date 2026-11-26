@@ -6,7 +6,20 @@ import sys
 import tempfile
 import unittest
 
-GUARD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "provenance.py")
+HERE = os.path.dirname(os.path.abspath(__file__))
+GUARD = os.path.join(HERE, "provenance.py")
+
+# Marker text is joined from pieces at run time, so these tests pass the
+# guard themselves: they are checked like every other file.
+BSL_TITLE = "Business Source " + "License 1.1"
+LICENSOR = "Licensor: " + "MetaDAO LLC"
+SPDX = "BUSL" + "-1.1"
+GRANT = "Additional Use " + "Grant"
+MARIADB = "MariaDB " + "Corporation"
+NPM = "@metadao" + "project/"
+FUTARCHY_ID = "FUTA" + "RELBfJfQ8RDGhg1wdhddq1odMAJUePHFuBYfUxKq"
+ADMIN_KEY = "6awy" + "HMshBGVjJ3ozdSJdyyDE1CTAXUwrpNMaRGMsb4sf"
+GUARD_FILES = ("provenance.py", "test_provenance.py", "test_provenance_encodings.py")
 
 
 class ProvenanceTest(unittest.TestCase):
@@ -55,29 +68,29 @@ class ProvenanceTest(unittest.TestCase):
         self.assertAllowed("programs/raise/src/lib.rs", "pub fn hello() {}\n")
 
     def test_bsl_license_header_blocked(self):
-        self.assertBlocked("LICENSE", "Business Source License 1.1\n\nLicensor: MetaDAO LLC\n")
+        self.assertBlocked("LICENSE", f"{BSL_TITLE}\n\n{LICENSOR}\n")
 
     def test_bsl_spdx_identifier_blocked(self):
-        self.assertBlocked("programs/x/Cargo.toml", 'license = "BUSL-1.1"\n')
+        self.assertBlocked("programs/x/Cargo.toml", f'license = "{SPDX}"\n')
 
     def test_additional_use_grant_blocked(self):
-        self.assertBlocked("programs/x/src/lib.rs", "// Additional Use Grant: none\n")
+        self.assertBlocked("programs/x/src/lib.rs", f"// {GRANT}: none\n")
 
     def test_bsl_program_id_blocked(self):
         self.assertBlocked(
             "programs/x/src/lib.rs",
-            'declare_id!("FUTARELBfJfQ8RDGhg1wdhddq1odMAJUePHFuBYfUxKq");\n',
+            f'declare_id!("{FUTARCHY_ID}");\n',
         )
 
     def test_bsl_admin_key_blocked(self):
         self.assertBlocked(
             "scripts/deploy.ts",
-            'const admin = "6awyHMshBGVjJ3ozdSJdyyDE1CTAXUwrpNMaRGMsb4sf";\n',
+            f'const admin = "{ADMIN_KEY}";\n',
         )
 
     def test_metadao_npm_package_blocked(self):
         self.assertBlocked(
-            "package.json", '{"dependencies": {"@metadaoproject/programs": "1.0.0"}}\n'
+            "package.json", '{"dependencies": {"' + NPM + 'programs": "1.0.0"}}\n'
         )
 
     def test_lgpl_v01_program_id_allowed(self):
@@ -95,17 +108,17 @@ class ProvenanceTest(unittest.TestCase):
         )
 
     def test_license_discussion_doc_may_mention_the_license(self):
-        self.assertAllowed("docs/research.md", "MetaDAO moved to the Business Source License 1.1.\n")
+        self.assertAllowed("docs/research.md", f"MetaDAO moved to the {BSL_TITLE}.\n")
 
     def test_other_markdown_mentioning_the_license_blocked(self):
-        self.assertBlocked("docs/notes.md", "MetaDAO moved to the Business Source License 1.1.\n")
+        self.assertBlocked("docs/notes.md", f"MetaDAO moved to the {BSL_TITLE}.\n")
 
     def test_non_markdown_docs_still_checked(self):
-        self.assertBlocked("docs/notes.txt", "Business Source License 1.1\n")
+        self.assertBlocked("docs/notes.txt", BSL_TITLE + "\n")
 
     def test_binary_file_checked(self):
         # Binary files used to be skipped (issue #4); they are checked now.
-        self.stage("fixtures/x.bin", "\0Business Source License 1.1")
+        self.stage("fixtures/x.bin", "\0" + BSL_TITLE)
         self.assertNotEqual(self.run_guard("staged").returncode, 0)
 
     # --- commit history (pre-push hook and CI) ---
@@ -127,7 +140,7 @@ class ProvenanceTest(unittest.TestCase):
 
     def test_added_then_removed_blocked(self):
         self.commit("src/a.rs", "pub fn a() {}\n")
-        self.commit("LICENSE", "Business Source License 1.1\n")
+        self.commit("LICENSE", BSL_TITLE + "\n")
         self.git("rm", "-q", "LICENSE")
         self.git("commit", "-q", "-m", "remove")
         self.assertEqual(self.run_guard("tree").returncode, 0)  # final tree is clean
@@ -139,7 +152,7 @@ class ProvenanceTest(unittest.TestCase):
         self.commit("src/a.rs", "pub fn a() {}\n")
         self.git("checkout", "-q", "-b", "side")
         self.commit(
-            "src/b.rs", 'declare_id!("FUTARELBfJfQ8RDGhg1wdhddq1odMAJUePHFuBYfUxKq");\n'
+            "src/b.rs", f'declare_id!("{FUTARCHY_ID}");\n'
         )
         self.git("checkout", "-q", "-")
         self.commit("src/c.rs", "pub fn c() {}\n")
@@ -149,7 +162,7 @@ class ProvenanceTest(unittest.TestCase):
         self.assertIn("src/b.rs", result.stderr)
 
     def test_range_excludes_older_commits(self):
-        self.commit("LICENSE", "Business Source License 1.1\n")
+        self.commit("LICENSE", BSL_TITLE + "\n")
         base = self.git("rev-parse", "HEAD").stdout.decode().strip()
         self.commit("src/a.rs", "pub fn a() {}\n")
         self.assertEqual(self.run_commits(f"{base}..HEAD").returncode, 0)
@@ -161,6 +174,21 @@ class ProvenanceTest(unittest.TestCase):
 
     def test_unknown_mode_fails(self):
         self.assertNotEqual(self.run_guard("everything").returncode, 0)
+
+    # --- the guard's own files are not exempt (issue #24) ---
+
+    def test_marker_added_to_guard_files_blocked(self):
+        for name in GUARD_FILES:
+            with open(os.path.join(HERE, name), encoding="utf-8") as handle:
+                text = handle.read()
+            path = f"scripts/guards/{name}"
+            self.assertBlocked(path, text + f'LICENSE = "{SPDX}"\n')
+            self.git("commit", "-q", "-m", name)
+            result = self.run_commits("HEAD")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(path, result.stderr)
+            self.git("rm", "-q", path)
+            self.git("commit", "-q", "-m", "remove")
 
 
 if __name__ == "__main__":
